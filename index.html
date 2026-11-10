@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>JUMP — Recreation Prototype v0.1</title>
+<style>
+  html,body{margin:0;padding:0;background:#fdf6ea;color:#5b2a1e;font-family:system-ui,sans-serif;overflow:hidden}
+  #ui{position:fixed;top:0;left:0;right:0;padding:12px 16px;z-index:10;pointer-events:none;
+      background:linear-gradient(#fff8ecdd,#fff8ec00)}
+  #ui h1{font-size:20px;margin:2px 0 4px;font-weight:700;letter-spacing:2px;color:#a52a1c}
+  #ui p{font-size:13.5px;margin:2px 0;color:#7a4a38;max-width:660px;line-height:1.5}
+  #stats{font-size:15px;font-weight:600;color:#8c2f1d;margin-top:6px;letter-spacing:.4px}
+  #msg{font-size:13.5px;color:#b3541e;margin-top:2px;min-height:18px}
+  #entervr{pointer-events:auto;margin-top:8px;padding:10px 18px;border-radius:8px;border:1px solid #b3541e;
+           background:#c33;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+  #entervr:hover{background:#d9452f}
+  #hint{position:fixed;bottom:10px;left:0;right:0;text-align:center;font-size:12.5px;color:#9a6a52;z-index:10;pointer-events:none}
+  canvas{display:block}
+  body.xr #ui, body.xr #hint{display:none}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="ui">
+  <h1>JUMP</h1>
+  <p>Leap the red rooftops to the tower. Land <b>on the glowing pads</b> — a roof alone doesn't count.
+     Fewer jumps wins. Click the scene to look around; <b>Space</b> leaps, <b>WASD</b> shuffles, <b>R</b> restarts.</p>
+  <div id="stats">JUMPS 0 · PADS 0/8 · 0:00</div>
+  <div id="msg">Step on the pads. Reach the top of the tower.</div>
+  <button id="entervr">Enter VR</button>
+</div>
+<div id="hint">Desktop: click to capture the mouse · Space / click = leap · WASD = shuffle · R = reset &nbsp;|&nbsp; Quest: trigger or A = leap · thumbstick = shuffle</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================
+   JUMP — recreation prototype v0.1
+   One mechanic: the leap. Fixed-power arc, facing = aim.
+   Land on roofs; step on glowing pads; top pad on the tower wins.
+   ============================================================ */
+
+// ---------- leap tuning (see DESIGN.md) ----------
+const LEAP_VX = 15;      // horizontal speed, m/s
+const LEAP_VY = 14.5;    // vertical speed, m/s
+const GRAVITY = 12;      // m/s^2 (a touch gamey, keeps arcs snappy)
+const WALK_SPEED = 2.4;  // m/s shuffle speed on a roof
+const EYE = 1.7;         // camera height above feet
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.xr.enabled = true;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xffe9cf, 70, 260);   // white-warm fog: city melts into the sunrise
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 900);
+const player = new THREE.Group();               // rig: position = player's feet
+player.add(camera);
+scene.add(player);
+camera.position.set(0, EYE, 0);
+
+// ---------- sky: white above, sunrise glow at the horizon ----------
+const skyUni = {
+  uFlash: { value: 0 },                          // win flash, decays back to 0
+  uSunDir: { value: new THREE.Vector3(-0.35, 0.10, -1).normalize() }
+};
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(420, 32, 20),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: skyUni,
+    vertexShader: `
+      varying vec3 vDir;
+      void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      varying vec3 vDir; uniform float uFlash; uniform vec3 uSunDir;
+      void main(){
+        float h = clamp(vDir.y, -0.05, 1.0);
+        vec3 horizon = vec3(1.00, 0.80, 0.55);   // peach-gold
+        vec3 mid     = vec3(1.00, 0.93, 0.82);
+        vec3 top     = vec3(1.00, 1.00, 1.00);   // pure white backscape
+        vec3 col = mix(horizon, mid, smoothstep(0.0, 0.18, h));
+        col = mix(col, top, smoothstep(0.15, 0.65, h));
+        float sun = pow(max(dot(normalize(vec3(vDir.x,0.0,vDir.z)), normalize(vec3(uSunDir.x,0.0,uSunDir.z))), 0.0), 6.0)
+                  * exp(-max(h,0.0) * 5.5);
+        col += vec3(1.0, 0.62, 0.28) * sun * 0.55;          // sunrise bloom around the sun azimuth
+        col += vec3(1.0, 0.85, 0.55) * uFlash * 0.6;        // win flash
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  })
+);
+scene.add(sky);
+
+// ---------- lights ----------
+scene.add(new THREE.HemisphereLight(0xffffff, 0xffdfba, 0.95));
+const sun = new THREE.DirectionalLight(0xffd9a6, 1.6);
+sun.position.set(-70, 90, -190);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -60; sun.shadow.camera.right = 160;
+sun.shadow.camera.top = 60;  sun.shadow.camera.bottom = -190;
+sun.shadow.camera.far = 500;
+sun.shadow.bias = -0.0006;
+scene.add(sun);
+
+// ---------- ground: bright street plane + faint grid ----------
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(600, 600),
+  new THREE.MeshLambertMaterial({ color: 0xf8f1e3 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(600, 120, 0xe9d9bd, 0xefe3cd);
+grid.position.y = 0.02;
+grid.material.transparent = true; grid.material.opacity = 0.45;
+scene.add(grid);
+
+// ---------- deterministic RNG so the city is the same every visit ----------
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+const rand = mulberry32(20261108);
+const pick = arr => arr[Math.floor(rand() * arr.length)];
+
+// ---------- surfaces & buildings ----------
+// Every landable flat top is registered as a rect: {x0,x1,z0,z1,y}
+const surfaces = [];
+function addSurface(cx, cz, w, d, y){ const s = { x0: cx - w/2, x1: cx + w/2, z0: cz - d/2, z1: cz + d/2, y }; surfaces.push(s); return s; }
+function surfaceAt(x, z, maxY){ // highest surface under a point, at or below maxY
+  let best = null;
+  for (const s of surfaces) if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1 && s.y <= maxY && (!best || s.y > best.y)) best = s;
+  return best;
+}
+
+const REDS = [0xb3392e, 0xc0452f, 0xa02c22, 0xcd5636, 0x9c2b1f, 0xbb4030, 0xd0603c];
+const redMat = c => new THREE.MeshLambertMaterial({ color: c });
+const trimMat = new THREE.MeshLambertMaterial({ color: 0xf3e3cd });  // pale stone trim
+const cityGroup = new THREE.Group(); scene.add(cityGroup);
+
+// Build one complicated building: main slab + optional setback tier +
+// parapet ring + rooftop clutter (boxes / water tower). All tops landable.
+function buildBuilding(cx, cz, w, d, h, opts = {}) {
+  const g = new THREE.Group();
+  const mat = redMat(opts.color ?? pick(REDS));
+  const main = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  main.position.set(cx, h / 2, cz);
+  main.castShadow = true; main.receiveShadow = true;
+  g.add(main);
+  const roofSurf = addSurface(cx, cz, w, d, h);
+
+  // crisp edge outline on route buildings & the tower only (perf)
+  if (opts.edges) {
+    const e = new THREE.LineSegments(
+      new THREE.EdgesGeometry(main.geometry),
+      new THREE.LineBasicMaterial({ color: 0x6e1a10, transparent: true, opacity: 0.35 }));
+    e.position.copy(main.position); g.add(e);
+  }
+  // parapet ring
+  const pH = 0.85, pT = 0.32, pm = redMat(new THREE.Color(opts.color ?? 0xb3392e).multiplyScalar(0.85));
+  const mk = (bw, bd, bx, bz) => { const m = new THREE.Mesh(new THREE.BoxGeometry(bw, pH, bd), pm); m.position.set(bx, h + pH/2, bz); m.castShadow = true; g.add(m); };
+  mk(w, pT, cx, cz - d/2 + pT/2); mk(w, pT, cx, cz + d/2 - pT/2);
+  mk(pT, d, cx - w/2 + pT/2, cz); mk(pT, d, cx + w/2 - pT/2, cz);
+
+  // setback tier (its own landable roof). Route buildings use a corner
+  // tier tucked into the SE corner so it can never bury the center pad.
+  if (opts.setback) {
+    let sw = w * 0.55, sd = d * 0.55;
+    let ox = (rand() - 0.5) * (w - sw) * 0.5, oz = (rand() - 0.5) * (d - sd) * 0.5;
+    if (opts.cornerTier) { sw = w * 0.34; sd = d * 0.34; ox = (w - sw) / 2 - 0.6; oz = (d - sd) / 2 - 0.6; }
+    const sh = 2.2 + rand() * 2.4;
+    const tier = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, sd), mat);
+    tier.position.set(cx + ox, h + sh/2, cz + oz); tier.castShadow = true; g.add(tier);
+    addSurface(cx + ox, cz + oz, sw, sd, h + sh);
+  }
+  // rooftop clutter: 1–3 boxes, sometimes a water tower — tops are landable
+  const n = opts.clutter ?? (1 + Math.floor(rand() * 3));
+  for (let i = 0; i < n; i++) {
+    const cw = 1.6 + rand() * 2.4, cd = 1.6 + rand() * 2.4, ch = 1.0 + rand() * 1.6;
+    const ox = (rand() - 0.5) * (w - cw - 2), oz = (rand() - 0.5) * (d - cd - 2);
+    if (opts.padSpot && Math.abs(ox - opts.padSpot.x) < 3.4 && Math.abs(oz - opts.padSpot.z) < 3.4) continue; // keep the pad clear
+    const box = new THREE.Mesh(new THREE.BoxGeometry(cw, ch, cd), trimMat);
+    box.position.set(cx + ox, h + ch/2, cz + oz); box.castShadow = true; g.add(box);
+    addSurface(cx + ox, cz + oz, cw, cd, h + ch);
+  }
+  if (opts.waterTower) {
+    const tx = cx + w * 0.28, tz = cz - d * 0.26;
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.7, 3.0, 10), redMat(0x8f2a20));
+    tank.position.set(tx, h + 2.2, tz); tank.castShadow = true; g.add(tank);
+    const legs = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.8, 2.4), trimMat);
+    legs.position.set(tx, h + 0.4, tz); g.add(legs);
+    addSurface(tx, tz, 2.6, 2.6, h + 3.7);
+  }
+  cityGroup.add(g);
+  return roofSurf;
+}
+
+// ---------- the route: 8 buildings climbing to the goal tower ----------
+const ROUTE = [
+  { x:   0, z:    0, w: 20, d: 20, h:  6 },
+  { x:  26, z:  -12, w: 18, d: 18, h: 12 },
+  { x:  16, z:  -38, w: 17, d: 17, h: 18 },
+  { x:  42, z:  -48, w: 18, d: 16, h: 24 },
+  { x:  34, z:  -74, w: 16, d: 16, h: 31 },
+  { x:  60, z:  -82, w: 17, d: 17, h: 37 },
+  { x:  52, z: -108, w: 16, d: 16, h: 44 },
+  { x:  78, z: -118, w: 24, d: 24, h: 51 },   // GOAL TOWER
+];
+const routeSurfs = ROUTE.map((r, i) => buildBuilding(r.x, r.z, r.w, r.d, r.h, {
+  edges: true,
+  setback: i % 2 === 0, cornerTier: true,
+  waterTower: i === 2 || i === 5,
+  color: i === ROUTE.length - 1 ? 0x8f2318 : undefined,
+  padSpot: { x: 0, z: 0 }, clutter: 2
+}));
+
+// pillar of light above the goal tower so you can see where you're headed
+const towerTop = ROUTE[ROUTE.length - 1];
+const beam = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.1, 1.6, 90, 12, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0xffca7a, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false, fog: false })
+);
+beam.position.set(towerTop.x, towerTop.h + 45, towerTop.z);
+scene.add(beam);
+
+// ---------- filler city (seeded, avoids the route) ----------
+function overlapsRoute(x, z, w, d) {
+  return ROUTE.some(r => Math.abs(x - r.x) < (w + r.w) / 2 + 9 && Math.abs(z - r.z) < (d + r.d) / 2 + 9);
+}
+let placed = 0, guard = 0;
+while (placed < 58 && guard++ < 600) {
+  const x = -75 + rand() * 215, z = -180 + rand() * 230;
+  const w = 11 + rand() * 10, d = 11 + rand() * 10;
+  if (overlapsRoute(x, z, w, d)) continue;
+  const h = 4 + rand() * 22;
+  buildBuilding(x, z, w, d, h, { setback: rand() < 0.35, clutter: Math.floor(rand() * 3) });
+  placed++;
+}
+
+// ---------- route pads ----------
+const PAD_OFF = new THREE.MeshLambertMaterial({ color: 0x0e3a3a, emissive: 0x54f2ff, emissiveIntensity: 1.5 });
+const PAD_ON  = new THREE.MeshLambertMaterial({ color: 0x4a3205, emissive: 0xffc84d, emissiveIntensity: 1.7 });
+const pads = ROUTE.map((r, i) => {
+  const goal = i === ROUTE.length - 1;
+  const size = goal ? 4.6 : 3.4;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, 0.22, size), PAD_OFF.clone());
+  mesh.position.set(r.x, r.h + 0.11, r.z);
+  scene.add(mesh);
+  return { mesh, x: r.x, z: r.z, y: r.h, size, goal, active: false };
+});
+
+// ---------- tiny WebAudio bleeps (created lazily on first gesture) ----------
+let AC = null;
+function audio(){ if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); return AC; }
+function tone(f0, f1, dur, type = 'sine', gain = 0.12, delay = 0) {
+  try {
+    const ac = audio(), t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(f1, 1), t + dur);
+    g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) { /* audio is garnish, never fatal */ }
+}
+const sfx = {
+  leap: () => tone(300, 90, 0.22, 'sine', 0.10),
+  land: () => tone(140, 70, 0.10, 'triangle', 0.14),
+  pad:  () => { tone(880, 880, 0.09, 'sine', 0.12); tone(1318, 1318, 0.14, 'sine', 0.12, 0.09); },
+  fall: () => tone(400, 60, 0.4, 'sawtooth', 0.05),
+  win:  () => [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.22, 'sine', 0.12, i * 0.13))
+};
+
+// ---------- HUD: head-locked canvas plane (VR) + DOM mirror (desktop) ----------
+const hudCanvas = document.createElement('canvas'); hudCanvas.width = 640; hudCanvas.height = 200;
+const hudCtx = hudCanvas.getContext('2d');
+const hudTex = new THREE.CanvasTexture(hudCanvas);
+const hud = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.66, 0.206),
+  new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false })
+);
+hud.position.set(0, -0.30, -0.95); hud.renderOrder = 99;
+camera.add(hud);
+const elStats = document.getElementById('stats'), elMsg = document.getElementById('msg');
+
+let message = 'Step on the pads. Reach the top of the tower.';
+function fmtTime(s){ return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); }
+function drawHUD() {
+  const line = `JUMPS ${state.jumps} · PADS ${pads.filter(p => p.active).length}/${pads.length} · ${fmtTime(state.time)}`;
+  hudCtx.clearRect(0, 0, 640, 200);
+  hudCtx.fillStyle = 'rgba(255,248,236,0.88)';
+  hudCtx.beginPath(); hudCtx.roundRect(6, 6, 628, 188, 26); hudCtx.fill();
+  hudCtx.textAlign = 'center';
+  hudCtx.fillStyle = '#8c2f1d'; hudCtx.font = '700 44px system-ui, sans-serif';
+  hudCtx.fillText(state.won ? '★ YOU REACHED THE TOP ★' : line, 320, 78);
+  hudCtx.font = '29px system-ui, sans-serif';
+  if (state.won) { hudCtx.fillStyle = '#7a4a38'; hudCtx.fillText(`${state.jumps} jumps · ${fmtTime(state.time)} — press R to run it again`, 320, 132); }
+  else { hudCtx.fillStyle = '#b3541e'; hudCtx.fillText(message, 320, 132); }
+  hudTex.needsUpdate = true;
+  elStats.textContent = line; elMsg.textContent = state.won ? 'You reached the top! Press R to run it again.' : message;
+}
+
+// ---------- game state ----------
+const state = {
+  mode: 'ready',            // ready (standing) | flying | won
+  jumps: 0, time: 0, timerOn: false, won: false,
+  vel: new THREE.Vector3(),
+  feet: new THREE.Vector3(ROUTE[0].x, ROUTE[0].h, ROUTE[0].z),
+  standing: null,           // surface rect we're standing on
+  lastLanded: null          // {x, z, surf} — respawn point
+};
+state.standing = routeSurfs[0];
+state.lastLanded = { x: state.feet.x, z: state.feet.z, surf: routeSurfs[0] };
+
+function setMessage(m){ message = m; drawHUD(); }
+function syncRig(){ player.position.copy(state.feet); }
+
+function activatePad(p) {
+  if (p.active) return;
+  p.active = true;
+  p.mesh.material = PAD_ON.clone();
+  if (p.goal) { winRun(); return; }
+  sfx.pad();
+  setMessage(`Pad ${pads.filter(q => q.active).length}/${pads.length}!`);
+  drawHUD();
+}
+function checkPad() { // standing on a pad?
+  for (const p of pads) {
+    if (!p.active && Math.abs(state.feet.y - p.y) < 0.6 &&
+        Math.abs(state.feet.x - p.x) <= p.size / 2 && Math.abs(state.feet.z - p.z) <= p.size / 2) activatePad(p);
+  }
+}
+function winRun() {
+  state.won = true; state.mode = 'won'; state.timerOn = false;
+  skyUni.uFlash.value = 1.0;
+  sfx.win();
+  drawHUD();
+}
+function resetRun() {
+  state.mode = 'ready'; state.jumps = 0; state.time = 0; state.timerOn = false; state.won = false;
+  skyUni.uFlash.value = 0;
+  pads.forEach(p => { p.active = false; p.mesh.material = PAD_OFF.clone(); });
+  state.feet.set(ROUTE[0].x, ROUTE[0].h, ROUTE[0].z);
+  state.standing = routeSurfs[0];
+  state.lastLanded = { x: state.feet.x, z: state.feet.z, surf: routeSurfs[0] };
+  syncRig(); setMessage('Step on the pads. Reach the top of the tower.');
+  activatePad(pads[0]);           // you spawn standing on pad 1
+  state.jumps = 0; drawHUD();     // (activation doesn't cost a jump; keep the counter clean)
+}
+
+// ---------- the leap ----------
+const _fwd = new THREE.Vector3();
+function facingDir() { // horizontal facing of the camera (headset or mouse-look)
+  camera.getWorldDirection(_fwd); _fwd.y = 0;
+  if (_fwd.lengthSq() < 1e-6) _fwd.set(0, 0, -1);
+  return _fwd.normalize();
+}
+function leap() {
+  if (state.mode !== 'ready') return;
+  audio();
+  const d = facingDir();
+  state.vel.set(d.x * LEAP_VX, LEAP_VY, d.z * LEAP_VX);
+  state.mode = 'flying';
+  state.jumps++;
+  state.timerOn = true;
+  sfx.leap();
+  drawHUD();
+}
+function landOn(surf) {
+  state.feet.y = surf.y;
+  state.mode = 'ready';
+  state.standing = surf;
+  state.lastLanded = { x: state.feet.x, z: state.feet.z, surf };
+  state.vel.set(0, 0, 0);
+  syncRig(); sfx.land();
+  checkPad(); drawHUD();
+}
+function fallToStreet() {
+  sfx.fall();
+  state.jumps++;                                    // +1 penalty jump
+  state.feet.set(state.lastLanded.x, state.lastLanded.surf.y, state.lastLanded.z);
+  state.standing = state.lastLanded.surf;
+  state.mode = 'ready'; state.vel.set(0, 0, 0);
+  syncRig();
+  setMessage('Missed it — back to the last roof (+1 jump)');
+  checkPad(); drawHUD();
+}
+
+// ---------- arc preview (while standing): sampled points + landing ring ----------
+const ARC_PTS = 90;
+const arcGeo = new THREE.BufferGeometry();
+arcGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ARC_PTS * 3), 3));
+const arcLine = new THREE.Line(arcGeo, new THREE.LineBasicMaterial({ color: 0x2fbfae, transparent: true, opacity: 0.55 }));
+arcLine.frustumCulled = false; scene.add(arcLine);
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.8, 28),
+  new THREE.MeshBasicMaterial({ color: 0x2fbfae, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+ring.rotation.x = -Math.PI / 2; scene.add(ring);
+
+function predictLanding() { // simulate the exact leap physics, return {x,y,z,hit,surf}
+  const d = facingDir();
+  let p = state.feet.clone(), v = new THREE.Vector3(d.x * LEAP_VX, LEAP_VY, d.z * LEAP_VX);
+  const pts = [p.clone()]; const dt = 0.05;
+  for (let i = 0; i < ARC_PTS - 1; i++) {
+    const prev = p.clone();
+    v.y -= GRAVITY * dt; p.addScaledVector(v, dt);
+    if (v.y <= 0) {
+      const s = surfaceAt(p.x, p.z, prev.y + 0.001);
+      if (s && prev.y >= s.y && p.y <= s.y) { pts.push(new THREE.Vector3(p.x, s.y, p.z)); return { pts, x: p.x, y: s.y, z: p.z, hit: true, surf: s }; }
+    }
+    if (p.y < 0) { pts.push(new THREE.Vector3(p.x, 0, p.z)); return { pts, x: p.x, y: 0, z: p.z, hit: false, surf: null }; }
+    pts.push(p.clone());
+  }
+  return { pts, x: p.x, y: p.y, z: p.z, hit: false, surf: null };
+}
+function updatePreview() {
+  const show = state.mode === 'ready';
+  arcLine.visible = ring.visible = show;
+  if (!show) return;
+  const r = predictLanding();
+  const pos = arcGeo.attributes.position;
+  for (let i = 0; i < ARC_PTS; i++) {
+    const p = r.pts[Math.min(i, r.pts.length - 1)];
+    pos.setXYZ(i, p.x, p.y + 0.05, p.z);
+  }
+  pos.needsUpdate = true;
+  arcGeo.setDrawRange(0, r.pts.length);
+  const onPad = r.hit && pads.some(p => !p.goal && Math.abs(r.y - p.y) < 0.6 && Math.abs(r.x - p.x) <= p.size/2 && Math.abs(r.z - p.z) <= p.size/2);
+  const col = !r.hit ? 0xff5040 : (onPad ? 0xffb52e : 0x2fbfae);
+  arcLine.material.color.setHex(col); ring.material.color.setHex(col);
+  ring.position.set(r.x, r.y + 0.06, r.z);
+}
+
+// ---------- input: desktop ----------
+let yaw = 0, pitch = 0;                    // camera default looks down -Z; the route runs toward -Z
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); leap(); }
+  if (e.code === 'KeyR') resetRun();
+});
+addEventListener('keyup', e => keys[e.code] = false);
+renderer.domElement.addEventListener('click', () => {
+  if (document.pointerLockElement) leap();
+  else renderer.domElement.requestPointerLock();
+});
+addEventListener('mousemove', e => {
+  if (!document.pointerLockElement) return;
+  yaw -= e.movementX * 0.0022; pitch -= e.movementY * 0.0022;
+  pitch = THREE.MathUtils.clamp(pitch, -1.25, 1.25);
+});
+function desktopMove(dt) {
+  if (state.mode !== 'ready' || !state.standing) return;
+  let mx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), mz = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  if (!mx && !mz) return;
+  const s = Math.sin(yaw), c = Math.cos(yaw);
+  const wx = (mx * c - mz * s), wz = (-mx * s - mz * c);   // camera-relative shuffle
+  const l = Math.hypot(wx, wz) || 1;
+  state.feet.x += wx / l * WALK_SPEED * dt;
+  state.feet.z += wz / l * WALK_SPEED * dt;
+  clampToStanding();
+}
+function clampToStanding() {
+  const s = state.standing, m = 0.35;
+  state.feet.x = THREE.MathUtils.clamp(state.feet.x, s.x0 + m, s.x1 - m);
+  state.feet.z = THREE.MathUtils.clamp(state.feet.z, s.z0 + m, s.z1 - m);
+  syncRig();
+}
+
+// ---------- input: WebXR ----------
+document.getElementById('entervr').onclick = async () => {
+  const btn = document.getElementById('entervr');
+  if (!navigator.xr) { setMessage('This browser has no WebXR — on the Quest, open this page in the Meta Quest Browser.'); return; }
+  try {
+    const session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] });
+    await renderer.xr.setSession(session);
+    session.addEventListener('select', () => leap());       // trigger
+    btn.textContent = 'In VR';
+  } catch (e) { setMessage('Could not start VR: ' + e.message); }
+};
+renderer.xr.addEventListener('sessionstart', () => document.body.classList.add('xr'));
+renderer.xr.addEventListener('sessionend', () => document.body.classList.remove('xr'));
+
+const btnWasDown = new Set();
+function xrInput(dt) {
+  const session = renderer.xr.getSession();
+  if (!session) return;
+  for (const src of session.inputSources) {
+    const gp = src.gamepad; if (!gp) continue;
+    // A button (index 4) or B (5) on either controller = leap
+    for (const bi of [4, 5]) {
+      const key = src.handedness + bi, down = gp.buttons[bi] && gp.buttons[bi].pressed;
+      if (down && !btnWasDown.has(key)) { btnWasDown.add(key); leap(); }
+      if (!down) btnWasDown.delete(key);
+    }
+    // thumbstick shuffle while standing
+    if (state.mode === 'ready' && state.standing && gp.axes.length >= 4) {
+      const ax = gp.axes[2], ay = gp.axes[3];
+      if (Math.abs(ax) > 0.18 || Math.abs(ay) > 0.18) {
+        const d = facingDir();
+        const rx = -d.z, rz = d.x;                        // right vector
+        state.feet.x += (d.x * -ay + rx * ax) * WALK_SPEED * dt;
+        state.feet.z += (d.z * -ay + rz * ax) * WALK_SPEED * dt;
+        clampToStanding();
+      }
+    }
+  }
+}
+
+// ---------- main loop ----------
+const clock = new THREE.Clock();
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (renderer.xr.isPresenting) {
+    xrInput(dt);
+  } else {
+    camera.rotation.set(pitch, yaw, 0, 'YXZ');   // desktop mouse-look (rig carries position)
+    desktopMove(dt);
+  }
+
+  if (state.mode === 'flying') {
+    const prevY = state.feet.y;
+    state.vel.y -= GRAVITY * dt;
+    state.feet.addScaledVector(state.vel, dt);
+    if (state.vel.y <= 0) {
+      const s = surfaceAt(state.feet.x, state.feet.z, prevY + 0.001);
+      if (s && prevY >= s.y && state.feet.y <= s.y) landOn(s);
+    }
+    if (state.mode === 'flying' && state.feet.y < 0) fallToStreet();
+    syncRig();
+  }
+
+  if (state.timerOn && !state.won) { state.time += dt; }
+  skyUni.uFlash.value = Math.max(0, skyUni.uFlash.value - dt * 0.5);
+  beam.material.opacity = 0.13 + Math.sin(performance.now() * 0.002) * 0.05;
+
+  updatePreview();
+  drawHUD();
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(tick);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- go ----------
+syncRig();
+activatePad(pads[0]);
+state.jumps = 0;
+drawHUD();
+</script>
+</body>
+</html>
