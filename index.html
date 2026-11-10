@@ -3,18 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>JUMP — Recreation Prototype v0.1</title>
+<title>JUMP — Recreation Prototype v0.2</title>
 <style>
   html,body{margin:0;padding:0;background:#fdf6ea;color:#5b2a1e;font-family:system-ui,sans-serif;overflow:hidden}
   #ui{position:fixed;top:0;left:0;right:0;padding:12px 16px;z-index:10;pointer-events:none;
       background:linear-gradient(#fff8ecdd,#fff8ec00)}
   #ui h1{font-size:20px;margin:2px 0 4px;font-weight:700;letter-spacing:2px;color:#a52a1c}
-  #ui p{font-size:13.5px;margin:2px 0;color:#7a4a38;max-width:660px;line-height:1.5}
+  #ui p{font-size:13.5px;margin:2px 0;color:#7a4a38;max-width:680px;line-height:1.5}
   #stats{font-size:15px;font-weight:600;color:#8c2f1d;margin-top:6px;letter-spacing:.4px}
   #msg{font-size:13.5px;color:#b3541e;margin-top:2px;min-height:18px}
   #entervr{pointer-events:auto;margin-top:8px;padding:10px 18px;border-radius:8px;border:1px solid #b3541e;
            background:#c33;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
   #entervr:hover{background:#d9452f}
+  #aimset{pointer-events:auto;margin-top:8px;font-size:13.5px;color:#7a4a38}
+  #aimset label{margin-right:14px;cursor:pointer}
   #hint{position:fixed;bottom:10px;left:0;right:0;text-align:center;font-size:12.5px;color:#9a6a52;z-index:10;pointer-events:none}
   canvas{display:block}
   body.xr #ui, body.xr #hint{display:none}
@@ -25,27 +27,40 @@
 </head>
 <body>
 <div id="ui">
-  <h1>JUMP</h1>
-  <p>Leap the red rooftops to the tower. Land <b>on the glowing pads</b> — a roof alone doesn't count.
-     Fewer jumps wins. Click the scene to look around; <b>Space</b> leaps, <b>WASD</b> shuffles, <b>R</b> restarts.</p>
+  <h1>JUMP <span style="font-size:12px;letter-spacing:1px;color:#b3541e">v0.2 · NEW YORK</span></h1>
+  <p>Leap the rooftops of New York to the top of One World Trade Center. Land <b>on the glowing pads</b> — a roof alone doesn't count.
+     Your <b>hand aims the jump</b>: raise your arm to fly higher and farther, point level to drop short. Fewer jumps wins.</p>
   <div id="stats">JUMPS 0 · PADS 0/8 · 0:00</div>
   <div id="msg">Step on the pads. Reach the top of the tower.</div>
   <button id="entervr">Enter VR</button>
+  <div id="aimset">Aiming hand:
+    <label><input type="radio" name="aimhand" value="right" checked> Right</label>
+    <label><input type="radio" name="aimhand" value="left"> Left</label>
+    <span style="color:#9a6a52">(in VR, click either thumbstick to switch · stats live on the other wrist — palm up to peek)</span>
+  </div>
 </div>
-<div id="hint">Desktop: click to capture the mouse · Space / click = leap · WASD = shuffle · R = reset &nbsp;|&nbsp; Quest: trigger or A = leap · thumbstick = shuffle</div>
+<div id="hint">Desktop: click to capture the mouse · look to aim (look up = higher arc) · Space / click = leap · WASD = shuffle · R = reset &nbsp;|&nbsp; Quest: aim with your hand, trigger or A = leap · thumbstick = shuffle · palm up on the free hand = stats</div>
 
 <script type="module">
 import * as THREE from 'three';
 
 /* ============================================================
-   JUMP — recreation prototype v0.1
-   One mechanic: the leap. Fixed-power arc, facing = aim.
-   Land on roofs; step on glowing pads; top pad on the tower wins.
+   JUMP — recreation prototype v0.2
+   One mechanic: the leap. v0.2 changes (Dan's in-headset notes):
+   · Aim comes from the HAND (full 3D aim direction × fixed speed,
+     gravity makes the curve) — raise the hand to elevate the arc.
+     Left/right aiming hand is selectable; desktop uses look dir.
+   · A recognisable New York: Flatiron → MetLife → Woolworth →
+     Chrysler → Empire State → 432 Park → One Vanderbilt →
+     One World Trade Center, in a dense procedural city.
+   · Building SIDE collision in flight + in the arc preview:
+     hit a wall, drop straight down its face, miss handling.
+   · Stats HUD lives on the WRIST of the non-aiming hand,
+     half-size, palm-gated: palm down = hidden, palm up = shown.
    ============================================================ */
 
-// ---------- leap tuning (see DESIGN.md) ----------
-const LEAP_VX = 15;      // horizontal speed, m/s
-const LEAP_VY = 14.5;    // vertical speed, m/s
+// ---------- leap tuning ----------
+const LAUNCH_SPEED = 21; // m/s, applied along the full 3D aim direction
 const GRAVITY = 12;      // m/s^2 (a touch gamey, keeps arcs snappy)
 const WALK_SPEED = 2.4;  // m/s shuffle speed on a roof
 const EYE = 1.7;         // camera height above feet
@@ -60,9 +75,9 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xffe9cf, 70, 260);   // white-warm fog: city melts into the sunrise
+scene.fog = new THREE.Fog(0xffe9cf, 80, 330);   // warm fog: the city melts into the sunrise with no clean edge
 
-const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 900);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 1500);
 const player = new THREE.Group();               // rig: position = player's feet
 player.add(camera);
 scene.add(player);
@@ -74,7 +89,7 @@ const skyUni = {
   uSunDir: { value: new THREE.Vector3(-0.35, 0.10, -1).normalize() }
 };
 const sky = new THREE.Mesh(
-  new THREE.SphereGeometry(420, 32, 20),
+  new THREE.SphereGeometry(520, 32, 20),
   new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: skyUni,
@@ -100,128 +115,247 @@ const sky = new THREE.Mesh(
 );
 scene.add(sky);
 
+// soft clouds: billboarded puffs, deliberately light (Dan: "not too crazy")
+{
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
+  const cx2 = cv.getContext('2d');
+  const blob = (x, y, r, a) => { const g = cx2.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(1, 'rgba(255,255,255,0)'); cx2.fillStyle = g; cx2.fillRect(x - r, y - r, r * 2, r * 2); };
+  blob(128, 70, 62, 0.85); blob(84, 76, 42, 0.7); blob(172, 76, 46, 0.7); blob(110, 56, 40, 0.6); blob(150, 58, 36, 0.6);
+  const ctex = new THREE.CanvasTexture(cv);
+  let seed = 777;
+  const crand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 26; i++) {
+    const m = new THREE.SpriteMaterial({ map: ctex, transparent: true, opacity: 0.28 + crand() * 0.3, depthWrite: false, fog: false });
+    const s = new THREE.Sprite(m);
+    const ang = crand() * Math.PI * 2, rad = 190 + crand() * 260;
+    s.position.set(Math.cos(ang) * rad, 62 + crand() * 85, Math.sin(ang) * rad - 90);
+    const sc = 70 + crand() * 110; s.scale.set(sc, sc * 0.42, 1);
+    scene.add(s);
+  }
+}
+
 // ---------- lights ----------
 scene.add(new THREE.HemisphereLight(0xffffff, 0xffdfba, 0.95));
 const sun = new THREE.DirectionalLight(0xffd9a6, 1.6);
 sun.position.set(-70, 90, -190);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.left = -60; sun.shadow.camera.right = 160;
-sun.shadow.camera.top = 60;  sun.shadow.camera.bottom = -190;
-sun.shadow.camera.far = 500;
+sun.shadow.camera.left = -90; sun.shadow.camera.right = 190;
+sun.shadow.camera.top = 90;  sun.shadow.camera.bottom = -240;
+sun.shadow.camera.far = 700;
 sun.shadow.bias = -0.0006;
 scene.add(sun);
 
-// ---------- ground: bright street plane + faint grid ----------
+// ---------- ground: street plane (reads as roads between dense blocks) ----------
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(600, 600),
-  new THREE.MeshLambertMaterial({ color: 0xf8f1e3 })
+  new THREE.PlaneGeometry(1100, 1100),
+  new THREE.MeshLambertMaterial({ color: 0x877b6a })   // warm asphalt, not bare cream
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
-const grid = new THREE.GridHelper(600, 120, 0xe9d9bd, 0xefe3cd);
+const grid = new THREE.GridHelper(1040, 40, 0x776c5e, 0x847a6a);  // 26 m street grid, aligned with the blocks
 grid.position.y = 0.02;
-grid.material.transparent = true; grid.material.opacity = 0.45;
+grid.material.transparent = true; grid.material.opacity = 0.35;
 scene.add(grid);
 
 // ---------- deterministic RNG so the city is the same every visit ----------
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
-const rand = mulberry32(20261108);
+const rand = mulberry32(20261110);
 const pick = arr => arr[Math.floor(rand() * arr.length)];
 
-// ---------- surfaces & buildings ----------
-// Every landable flat top is registered as a rect: {x0,x1,z0,z1,y}
-const surfaces = [];
+// ---------- surfaces & colliders ----------
+// Landable flat tops: {x0,x1,z0,z1,y}. Solid boxes for wall collision: {x0,x1,z0,z1,y0,y1}.
+const surfaces = [], colliders = [];
 function addSurface(cx, cz, w, d, y){ const s = { x0: cx - w/2, x1: cx + w/2, z0: cz - d/2, z1: cz + d/2, y }; surfaces.push(s); return s; }
+function addCollider(cx, cz, w, d, y0, y1){ const c = { x0: cx - w/2, x1: cx + w/2, z0: cz - d/2, z1: cz + d/2, y0, y1 }; colliders.push(c); return c; }
 function surfaceAt(x, z, maxY){ // highest surface under a point, at or below maxY
   let best = null;
   for (const s of surfaces) if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1 && s.y <= maxY && (!best || s.y > best.y)) best = s;
   return best;
 }
-
-const REDS = [0xb3392e, 0xc0452f, 0xa02c22, 0xcd5636, 0x9c2b1f, 0xbb4030, 0xd0603c];
-const redMat = c => new THREE.MeshLambertMaterial({ color: c });
-const trimMat = new THREE.MeshLambertMaterial({ color: 0xf3e3cd });  // pale stone trim
-const cityGroup = new THREE.Group(); scene.add(cityGroup);
-
-// Build one complicated building: main slab + optional setback tier +
-// parapet ring + rooftop clutter (boxes / water tower). All tops landable.
-function buildBuilding(cx, cz, w, d, h, opts = {}) {
-  const g = new THREE.Group();
-  const mat = redMat(opts.color ?? pick(REDS));
-  const main = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  main.position.set(cx, h / 2, cz);
-  main.castShadow = true; main.receiveShadow = true;
-  g.add(main);
-  const roofSurf = addSurface(cx, cz, w, d, h);
-
-  // crisp edge outline on route buildings & the tower only (perf)
-  if (opts.edges) {
-    const e = new THREE.LineSegments(
-      new THREE.EdgesGeometry(main.geometry),
-      new THREE.LineBasicMaterial({ color: 0x6e1a10, transparent: true, opacity: 0.35 }));
-    e.position.copy(main.position); g.add(e);
+// Segment (prev→cur, XZ) entering a solid box below its top: returns entry point or null.
+// Used by BOTH the real flight and the arc preview, so they can never disagree.
+function wallHit(prev, cur) {
+  let bestT = Infinity, best = null;
+  for (const c of colliders) {
+    // Cheap rejects: endpoint must end inside/near the box in XZ, and segment must start outside it
+    const wasIn = prev.x > c.x0 && prev.x < c.x1 && prev.z > c.z0 && prev.z < c.z1;
+    if (wasIn) continue;
+    // slab method on the XZ segment
+    let t0 = 0, t1 = 1, ok = true;
+    const dx = cur.x - prev.x, dz = cur.z - prev.z;
+    for (const [p, d, lo, hi] of [[prev.x, dx, c.x0, c.x1], [prev.z, dz, c.z0, c.z1]]) {
+      if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) { ok = false; break; } }
+      else {
+        let ta = (lo - p) / d, tb = (hi - p) / d;
+        if (ta > tb) [ta, tb] = [tb, ta];
+        t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+        if (t0 > t1) { ok = false; break; }
+      }
+    }
+    if (!ok || t1 < 0 || t0 > 1) continue;
+    const t = Math.max(t0, 0);
+    const ey = prev.y + (cur.y - prev.y) * t;
+    if (ey >= c.y1 - 0.001 || ey <= c.y0) continue;   // crossing above the roofline or below the base isn't a wall
+    if (t < bestT) { bestT = t; best = { x: prev.x + dx * t, z: prev.z + dz * t, y: ey, t }; }
   }
-  // parapet ring
-  const pH = 0.85, pT = 0.32, pm = redMat(new THREE.Color(opts.color ?? 0xb3392e).multiplyScalar(0.85));
-  const mk = (bw, bd, bx, bz) => { const m = new THREE.Mesh(new THREE.BoxGeometry(bw, pH, bd), pm); m.position.set(bx, h + pH/2, bz); m.castShadow = true; g.add(m); };
-  mk(w, pT, cx, cz - d/2 + pT/2); mk(w, pT, cx, cz + d/2 - pT/2);
-  mk(pT, d, cx - w/2 + pT/2, cz); mk(pT, d, cx + w/2 - pT/2, cz);
-
-  // setback tier (its own landable roof). Route buildings use a corner
-  // tier tucked into the SE corner so it can never bury the center pad.
-  if (opts.setback) {
-    let sw = w * 0.55, sd = d * 0.55;
-    let ox = (rand() - 0.5) * (w - sw) * 0.5, oz = (rand() - 0.5) * (d - sd) * 0.5;
-    if (opts.cornerTier) { sw = w * 0.34; sd = d * 0.34; ox = (w - sw) / 2 - 0.6; oz = (d - sd) / 2 - 0.6; }
-    const sh = 2.2 + rand() * 2.4;
-    const tier = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, sd), mat);
-    tier.position.set(cx + ox, h + sh/2, cz + oz); tier.castShadow = true; g.add(tier);
-    addSurface(cx + ox, cz + oz, sw, sd, h + sh);
-  }
-  // rooftop clutter: 1–3 boxes, sometimes a water tower — tops are landable
-  const n = opts.clutter ?? (1 + Math.floor(rand() * 3));
-  for (let i = 0; i < n; i++) {
-    const cw = 1.6 + rand() * 2.4, cd = 1.6 + rand() * 2.4, ch = 1.0 + rand() * 1.6;
-    const ox = (rand() - 0.5) * (w - cw - 2), oz = (rand() - 0.5) * (d - cd - 2);
-    if (opts.padSpot && Math.abs(ox - opts.padSpot.x) < 3.4 && Math.abs(oz - opts.padSpot.z) < 3.4) continue; // keep the pad clear
-    const box = new THREE.Mesh(new THREE.BoxGeometry(cw, ch, cd), trimMat);
-    box.position.set(cx + ox, h + ch/2, cz + oz); box.castShadow = true; g.add(box);
-    addSurface(cx + ox, cz + oz, cw, cd, h + ch);
-  }
-  if (opts.waterTower) {
-    const tx = cx + w * 0.28, tz = cz - d * 0.26;
-    const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.7, 3.0, 10), redMat(0x8f2a20));
-    tank.position.set(tx, h + 2.2, tz); tank.castShadow = true; g.add(tank);
-    const legs = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.8, 2.4), trimMat);
-    legs.position.set(tx, h + 0.4, tz); g.add(legs);
-    addSurface(tx, tz, 2.6, 2.6, h + 3.7);
-  }
-  cityGroup.add(g);
-  return roofSurf;
+  if (!best) return null;
+  // nudge the hit point a hair back outside the face so the slide starts clean
+  best.x -= (cur.x - prev.x) * 0.002; best.z -= (cur.z - prev.z) * 0.002;
+  return best;
 }
 
-// ---------- the route: 8 buildings climbing to the goal tower ----------
-const ROUTE = [
-  { x:   0, z:    0, w: 20, d: 20, h:  6 },
-  { x:  26, z:  -12, w: 18, d: 18, h: 12 },
-  { x:  16, z:  -38, w: 17, d: 17, h: 18 },
-  { x:  42, z:  -48, w: 18, d: 16, h: 24 },
-  { x:  34, z:  -74, w: 16, d: 16, h: 31 },
-  { x:  60, z:  -82, w: 17, d: 17, h: 37 },
-  { x:  52, z: -108, w: 16, d: 16, h: 44 },
-  { x:  78, z: -118, w: 24, d: 24, h: 51 },   // GOAL TOWER
-];
-const routeSurfs = ROUTE.map((r, i) => buildBuilding(r.x, r.z, r.w, r.d, r.h, {
-  edges: true,
-  setback: i % 2 === 0, cornerTier: true,
-  waterTower: i === 2 || i === 5,
-  color: i === ROUTE.length - 1 ? 0x8f2318 : undefined,
-  padSpot: { x: 0, z: 0 }, clutter: 2
-}));
+// ---------- facade textures: procedural window grids (some windows lit) ----------
+const facadeCache = new Map();
+function makeFacade(base, cols, rows, litRatio) {
+  const key = base + '|' + cols + '|' + rows + '|' + litRatio;
+  if (facadeCache.has(key)) return facadeCache.get(key);
+  const cv = document.createElement('canvas'); cv.width = 192; cv.height = 320;
+  const c = cv.getContext('2d');
+  c.fillStyle = base; c.fillRect(0, 0, 192, 320);
+  const grd = c.createLinearGradient(0, 0, 0, 320);
+  grd.addColorStop(0, 'rgba(255,255,255,0.10)'); grd.addColorStop(1, 'rgba(0,0,0,0.13)');
+  c.fillStyle = grd; c.fillRect(0, 0, 192, 320);
+  const mx = 14, my = 16, gw = (192 - mx * 2) / cols, gh = (320 - my * 2) / rows;
+  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+    const lit = rand() < litRatio;
+    c.fillStyle = lit ? '#ffd489' : 'rgba(30,20,26,0.82)';
+    c.fillRect(mx + i * gw + gw * 0.22, my + j * gh + gh * 0.24, gw * 0.56, gh * 0.5);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  const mat = new THREE.MeshLambertMaterial({ map: tex });
+  facadeCache.set(key, mat);
+  return mat;
+}
+const REDS = ['#b3392e', '#c0452f', '#a02c22', '#cd5636', '#9c2b1f', '#bb4030', '#d0603c'];
+const redMat = c => new THREE.MeshLambertMaterial({ color: c });
+const facade = (base, cols = 7, rows = 13) => makeFacade(base, cols, rows, 0.16);
+const trimMat = new THREE.MeshLambertMaterial({ color: 0xf3e3cd });   // pale stone trim
+const silverMat = new THREE.MeshLambertMaterial({ color: 0xd6dade }); // Chrysler crown / spires
+const copperMat = new THREE.MeshLambertMaterial({ color: 0x527a68 }); // Woolworth roof copper
+const cityGroup = new THREE.Group(); scene.add(cityGroup);
 
-// pillar of light above the goal tower so you can see where you're headed
+// Generic box part for landmark construction. base = y of its bottom.
+function B(g, cx, cz, w, base, hgt, d, mat, o = {}) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, d), mat);
+  m.position.set(cx, base + hgt / 2, cz);
+  m.castShadow = o.shadow !== false; m.receiveShadow = true;
+  g.add(m);
+  if (o.surf) var s = addSurface(cx, cz, w, d, base + hgt);
+  if (o.col !== false) addCollider(cx, cz, w, d, base, base + hgt);
+  return o.surf ? s : m;
+}
+function CYL(g, cx, cz, rT, rB, base, hgt, seg, mat, o = {}) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rT, rB, hgt, seg), mat);
+  m.position.set(cx, base + hgt / 2, cz);
+  m.castShadow = o.shadow !== false; m.receiveShadow = true;
+  g.add(m);
+  if (o.surf) var s = addSurface(cx, cz, rT * 1.35, rT * 1.35, base + hgt);
+  if (o.col) addCollider(cx, cz, rB * 1.45, rB * 1.45, base, base + hgt);
+  return o.surf ? s : m;
+}
+function CONE(g, cx, cz, r, base, hgt, seg, mat) {
+  const m = new THREE.Mesh(new THREE.ConeGeometry(r, hgt, seg), mat);
+  m.position.set(cx, base + hgt / 2, cz); m.castShadow = true; g.add(m); return m;
+}
+
+// ---------- the route: 8 recognisable NYC landmarks climbing to One WTC ----------
+// Heights are Dan's compressed game scale (real NYC heights squeezed to a
+// playable climb), ordered so the pads stair upward ~6–7 m per hop.
+const ROUTE = [
+  { kind: 'flatiron',  name: 'Flatiron Building',          x:   0, z:    0, w: 22, d: 22, h:  9, padDz: 1.5 },
+  { kind: 'metlife',   name: 'Metropolitan Life Tower',    x:  26, z:  -12, w: 16, d: 16, h: 15 },
+  { kind: 'woolworth', name: 'Woolworth Building',         x:  16, z:  -38, w: 17, d: 17, h: 21 },
+  { kind: 'chrysler',  name: 'Chrysler Building',          x:  42, z:  -48, w: 18, d: 16, h: 27 },
+  { kind: 'empire',    name: 'Empire State Building',      x:  34, z:  -74, w: 18, d: 18, h: 34 },
+  { kind: 'park432',   name: '432 Park Avenue',            x:  60, z:  -82, w: 13, d: 13, h: 40 },
+  { kind: 'vanderbilt',name: 'One Vanderbilt',             x:  52, z: -108, w: 17, d: 17, h: 46, padDx: -2.4, padDz: -2.4 },
+  { kind: 'wtc',       name: 'One World Trade Center',     x:  78, z: -118, w: 24, d: 24, h: 53 },
+];
+const padPos = r => ({ x: r.x + (r.padDx || 0), z: r.z + (r.padDz || 0) });
+
+function buildLandmark(r) {
+  const g = new THREE.Group(); cityGroup.add(g);
+  const { x, z, w, d, h } = r;
+  let top = null;
+  if (r.kind === 'flatiron') {
+    // Triangular wedge, prow toward -Z (the way the route runs), flat side south.
+    const geo = new THREE.CylinderGeometry(13, 13, h, 3, 1);
+    const m = new THREE.Mesh(geo, facade('#c9a184', 9, 11));
+    m.geometry.rotateY(Math.PI);                    // one vertex (prow) to -Z
+    m.scale.set(0.92, 1, 1.18);
+    m.position.set(x, h / 2, z); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    top = addSurface(x, z + 1.5, 11.5, 13, h);      // inset rect approximates the wedge top
+    addCollider(x, z + 1, 11, 13.5, 0, h);
+    B(g, x - 3.5, z + 4.5, 3.4, h, 1.6, 3.4, trimMat, {});   // stair bulkhead, pad stays clear
+  } else if (r.kind === 'metlife') {
+    B(g, x, z, w, 0, h - 6, d, facade('#c58a63', 8, 10), { surf: true });
+    top = B(g, x, z, 8.5, h - 6, 6, 8.5, facade('#cfa06f', 5, 6), { surf: true });   // clock tower shaft
+    // clock faces on all four sides of the tower, just under the top
+    for (const [ox, oz, ry] of [[0, -4.31, 0], [0, 4.31, Math.PI], [-4.31, 0, -Math.PI / 2], [4.31, 0, Math.PI / 2]]) {
+      const face = new THREE.Mesh(new THREE.CircleGeometry(1.55, 24), new THREE.MeshLambertMaterial({ color: 0xfff6da }));
+      face.position.set(x + ox, h - 3, z + oz); face.rotation.y = ry; g.add(face);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.09, 8, 24), trimMat);
+      rim.position.copy(face.position); rim.rotation.y = ry; g.add(rim);
+    }
+    const tx = x + 2.6, tz = z + 2.6;                 // pyramid-capped turret, rear corner
+    B(g, tx, tz, 2.6, h, 1.5, 2.6, trimMat, { col: false });
+    CONE(g, tx, tz, 2.1, h + 1.5, 2.6, 4, redMat(0x8f2a20));
+  } else if (r.kind === 'woolworth') {
+    top = B(g, x, z, w, 0, h, d, facade('#bd7a52', 8, 13), { surf: true });
+    const tx = x + 4.6, tz = z + 4.6;                 // copper pyramid turret, rear corner
+    B(g, tx, tz, 4, h, 2, 4, trimMat, {});
+    CONE(g, tx, tz, 3.1, h + 2, 3.6, 4, copperMat);
+    for (const [ox, oz] of [[-w/2 + 1.2, -d/2 + 1.2], [w/2 - 1.2, -d/2 + 1.2], [-w/2 + 1.2, d/2 - 1.2]]) {
+      B(g, x + ox, z + oz, 1.1, h, 0.9, 1.1, trimMat, { col: false });
+      CONE(g, x + ox, z + oz, 0.75, h + 0.9, 1.5, 6, copperMat);
+    }
+  } else if (r.kind === 'chrysler') {
+    top = B(g, x, z, w, 0, h, d, facade('#b56a4a', 8, 14), { surf: true });
+    const cxp = x + 4.6, czp = z + 4.4;               // terraced arched crown, rear corner
+    CYL(g, cxp, czp, 3.6, 3.9, h, 1.9, 14, silverMat, { col: true });
+    CYL(g, cxp, czp, 2.7, 3.4, h + 1.9, 1.9, 14, silverMat, { col: true });
+    CYL(g, cxp, czp, 1.8, 2.5, h + 3.8, 1.9, 14, silverMat, { col: true });
+    CYL(g, cxp, czp, 0.20, 0.34, h + 5.7, 5.2, 8, silverMat, {});
+    CONE(g, cxp, czp, 0.34, h + 10.9, 1.6, 8, silverMat);
+  } else if (r.kind === 'empire') {
+    B(g, x, z, w, 0, h - 9, d, facade('#c08552', 9, 12), { surf: true });          // broad base
+    B(g, x, z, 13, h - 9, 4.5, 13, facade('#c9905c', 7, 5), { surf: true });       // setback 1
+    top = B(g, x, z, 9, h - 4.5, 4.5, 9, facade('#d09a66', 5, 4), { surf: true }); // setback 2 = pad roof
+    CYL(g, x + 2.7, z + 2.7, 0.5, 0.6, h, 3.6, 8, silverMat, {});                  // mooring mast
+    CONE(g, x + 2.7, z + 2.7, 0.55, h + 3.6, 1.6, 8, silverMat);
+  } else if (r.kind === 'park432') {
+    // Impossibly thin slab with a strict square window grid — unmistakable.
+    top = B(g, x, z, w, 0, h, d, makeFacade('#a8543c', 6, 22, 0.10), { surf: true });
+    B(g, x, z - d / 2 + 0.3, w, h, 0.8, 0.6, trimMat, { col: false });             // pale parapet lip (edges only, pad stays clear)
+    B(g, x, z + d / 2 - 0.3, w, h, 0.8, 0.6, trimMat, { col: false });
+    B(g, x - w / 2 + 0.3, z, 0.6, h, 0.8, d, trimMat, { col: false });
+    B(g, x + w / 2 - 0.3, z, 0.6, h, 0.8, d, trimMat, { col: false });
+  } else if (r.kind === 'vanderbilt') {
+    B(g, x, z, w, 0, h - 9, d, facade('#b46344', 8, 11), { surf: true });
+    B(g, x - 1.2, z - 1.2, 14, h - 9, 4.5, 14, facade('#bc6e4a', 7, 5), { surf: true });
+    top = B(g, x - 2.4, z - 2.4, 11, h - 4.5, 4.5, 11, facade('#c47952', 6, 4), { surf: true });
+    CYL(g, x - 2.4 + 3.4, z - 2.4 + 3.4, 0.3, 0.42, h, 4.2, 8, silverMat, {});
+  } else if (r.kind === 'wtc') {
+    // Tapered shaft: square at the base rotating to a smaller square top,
+    // dense blue-grey glass over the red-city palette, spire at the rear corner.
+    const geo = new THREE.CylinderGeometry(11, 16.5, h, 4, 1);
+    const m = new THREE.Mesh(geo, makeFacade('#8e6a58', 11, 24, 0.22));
+    m.geometry.rotateY(Math.PI / 4);
+    m.position.set(x, h / 2, z); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    top = addSurface(x, z, 13.5, 13.5, h);
+    addCollider(x, z, 19.5, 19.5, 0, h);              // box approximation of the taper
+    CYL(g, x + 3.6, z + 3.6, 0.32, 0.5, h, 9.5, 8, silverMat, {});
+    CONE(g, x + 3.6, z + 3.6, 0.4, h + 9.5, 2.2, 8, silverMat);
+  }
+  return top;
+}
+const routeSurfs = ROUTE.map(r => buildLandmark(r));
+
+// pillar of light above One WTC so you can see where you're headed
 const towerTop = ROUTE[ROUTE.length - 1];
 const beam = new THREE.Mesh(
   new THREE.CylinderGeometry(1.1, 1.6, 90, 12, 1, true),
@@ -230,18 +364,63 @@ const beam = new THREE.Mesh(
 beam.position.set(towerTop.x, towerTop.h + 45, towerTop.z);
 scene.add(beam);
 
-// ---------- filler city (seeded, avoids the route) ----------
-function overlapsRoute(x, z, w, d) {
-  return ROUTE.some(r => Math.abs(x - r.x) < (w + r.w) / 2 + 9 && Math.abs(z - r.z) < (d + r.d) / 2 + 9);
+// ---------- dense filler city on a street grid (blocks out to the fog) ----------
+function overlapsRoute(x, z, w, d, margin = 7) {
+  return ROUTE.some(r => Math.abs(x - r.x) < (w + r.w) / 2 + margin && Math.abs(z - r.z) < (d + r.d) / 2 + margin);
 }
-let placed = 0, guard = 0;
-while (placed < 58 && guard++ < 600) {
-  const x = -75 + rand() * 215, z = -180 + rand() * 230;
-  const w = 11 + rand() * 10, d = 11 + rand() * 10;
-  if (overlapsRoute(x, z, w, d)) continue;
-  const h = 4 + rand() * 22;
-  buildBuilding(x, z, w, d, h, { setback: rand() < 0.35, clutter: Math.floor(rand() * 3) });
-  placed++;
+const PARK = { x0: -124, x1: -66, z0: -174, z1: -36 };   // Central Park: the one deliberate gap
+function buildBlock(cx, cz, w, d, h) {
+  const g = new THREE.Group(); cityGroup.add(g);
+  const mat = facade(pick(REDS), 6 + Math.floor(rand() * 3), 10 + Math.floor(rand() * 7));
+  const main = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  main.position.set(cx, h / 2, cz); main.receiveShadow = true; g.add(main);
+  addSurface(cx, cz, w, d, h);
+  addCollider(cx, cz, w, d, 0, h);
+  if (rand() < 0.3) {  // an occasional setback tier for skyline variety
+    const sw = w * 0.55, sd = d * 0.55, sh = 2 + rand() * 2.6;
+    const ox = (rand() - 0.5) * (w - sw) * 0.5, oz = (rand() - 0.5) * (d - sd) * 0.5;
+    const tier = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, sd), mat);
+    tier.position.set(cx + ox, h + sh / 2, cz + oz); tier.receiveShadow = true; g.add(tier);
+    addSurface(cx + ox, cz + oz, sw, sd, h + sh);
+    addCollider(cx + ox, cz + oz, sw, sd, h, h + sh);
+  }
+}
+{
+  let placed = 0;
+  for (let gx = -156; gx <= 208; gx += 26) for (let gz = -260; gz <= 66; gz += 26) {
+    const cx = gx + 13 + (rand() - 0.5) * 3, cz = gz + 13 + (rand() - 0.5) * 3;
+    const w = 19 + rand() * 4.5, d = 19 + rand() * 4.5;
+    if (cx > PARK.x0 - 4 && cx < PARK.x1 + 4 && cz > PARK.z0 - 4 && cz < PARK.z1 + 4) continue;
+    if (overlapsRoute(cx, cz, w, d)) continue;
+    // Fillers near the route stay low so leap corridors are never walled off;
+    // farther out they can rise into a proper skyline.
+    let nearRoute = Infinity;
+    for (const r of ROUTE) nearRoute = Math.min(nearRoute, Math.hypot(cx - r.x, cz - r.z));
+    const h = nearRoute < 50 ? 4 + rand() * 7 : 5 + rand() * 24;
+    buildBlock(cx, cz, w, d, h);
+    placed++;
+  }
+  console.log('JUMP v0.2 filler blocks:', placed);
+}
+// Central Park: green rectangle, a pale path, cone trees — no buildings, not landable
+{
+  const park = new THREE.Mesh(new THREE.PlaneGeometry(PARK.x1 - PARK.x0, PARK.z1 - PARK.z0),
+    new THREE.MeshLambertMaterial({ color: 0x6d8f57 }));
+  park.rotation.x = -Math.PI / 2;
+  park.position.set((PARK.x0 + PARK.x1) / 2, 0.04, (PARK.z0 + PARK.z1) / 2);
+  park.receiveShadow = true; scene.add(park);
+  const path = new THREE.Mesh(new THREE.PlaneGeometry(4, PARK.z1 - PARK.z0 - 8),
+    new THREE.MeshLambertMaterial({ color: 0xe8dcc2 }));
+  path.rotation.x = -Math.PI / 2;
+  path.position.set((PARK.x0 + PARK.x1) / 2, 0.06, (PARK.z0 + PARK.z1) / 2);
+  scene.add(path);
+  const treeMat = new THREE.MeshLambertMaterial({ color: 0x4e7a3e });
+  for (let i = 0; i < 46; i++) {
+    const tx = PARK.x0 + 4 + rand() * (PARK.x1 - PARK.x0 - 8), tz = PARK.z0 + 4 + rand() * (PARK.z1 - PARK.z0 - 8);
+    if (Math.abs(tx - (PARK.x0 + PARK.x1) / 2) < 3.4) continue;
+    const tree = new THREE.Mesh(new THREE.ConeGeometry(1.1 + rand(), 2.6 + rand() * 1.8, 7), treeMat);
+    tree.position.set(tx, 1.8, tz); scene.add(tree);
+  }
 }
 
 // ---------- route pads ----------
@@ -250,10 +429,11 @@ const PAD_ON  = new THREE.MeshLambertMaterial({ color: 0x4a3205, emissive: 0xffc
 const pads = ROUTE.map((r, i) => {
   const goal = i === ROUTE.length - 1;
   const size = goal ? 4.6 : 3.4;
+  const p = padPos(r);
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, 0.22, size), PAD_OFF.clone());
-  mesh.position.set(r.x, r.h + 0.11, r.z);
+  mesh.position.set(p.x, r.h + 0.11, p.z);
   scene.add(mesh);
-  return { mesh, x: r.x, z: r.z, y: r.h, size, goal, active: false };
+  return { mesh, x: p.x, z: p.z, y: r.h, size, goal, active: false, name: r.name };
 });
 
 // ---------- tiny WebAudio bleeps (created lazily on first gesture) ----------
@@ -277,43 +457,56 @@ const sfx = {
   win:  () => [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.22, 'sine', 0.12, i * 0.13))
 };
 
-// ---------- HUD: head-locked canvas plane (VR) + DOM mirror (desktop) ----------
-const hudCanvas = document.createElement('canvas'); hudCanvas.width = 640; hudCanvas.height = 200;
+// ---------- aiming hand setting (persisted; default RIGHT) ----------
+let aimHand = 'right';
+try { const saved = localStorage.getItem('jumpAimHand'); if (saved === 'left' || saved === 'right') aimHand = saved; } catch (e) {}
+const hudHand = () => aimHand === 'right' ? 'left' : 'right';   // stats wrist = the NON-aiming hand
+
+// ---------- HUD: canvas texture on a WRIST panel (VR) + DOM mirror (desktop) ----------
+// v0.1's HUD was a head-locked plane floating in view. v0.2: the same canvas
+// now drives a half-size panel on the non-aiming wrist, palm-gated.
+const hudCanvas = document.createElement('canvas'); hudCanvas.width = 640; hudCanvas.height = 220;
 const hudCtx = hudCanvas.getContext('2d');
 const hudTex = new THREE.CanvasTexture(hudCanvas);
-const hud = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.66, 0.206),
-  new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false })
+const wristHud = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.33, 0.113),           // ~half the v0.1 floating window (0.66 × 0.206)
+  new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false, side: THREE.DoubleSide })
 );
-hud.position.set(0, -0.30, -0.95); hud.renderOrder = 99;
-camera.add(hud);
+wristHud.rotation.x = Math.PI / 2;                // face the palm side of the grip (-Y in grip space)
+wristHud.position.set(0, -0.028, -0.02);
+wristHud.renderOrder = 99;
+wristHud.visible = false;
+scene.add(wristHud);                              // re-parented to the HUD wrist once controllers connect
 const elStats = document.getElementById('stats'), elMsg = document.getElementById('msg');
 
 let message = 'Step on the pads. Reach the top of the tower.';
 function fmtTime(s){ return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); }
 function drawHUD() {
   const line = `JUMPS ${state.jumps} · PADS ${pads.filter(p => p.active).length}/${pads.length} · ${fmtTime(state.time)}`;
-  hudCtx.clearRect(0, 0, 640, 200);
+  hudCtx.clearRect(0, 0, 640, 220);
   hudCtx.fillStyle = 'rgba(255,248,236,0.88)';
-  hudCtx.beginPath(); hudCtx.roundRect(6, 6, 628, 188, 26); hudCtx.fill();
+  hudCtx.beginPath(); hudCtx.roundRect(6, 6, 628, 208, 26); hudCtx.fill();
   hudCtx.textAlign = 'center';
   hudCtx.fillStyle = '#8c2f1d'; hudCtx.font = '700 44px system-ui, sans-serif';
-  hudCtx.fillText(state.won ? '★ YOU REACHED THE TOP ★' : line, 320, 78);
+  hudCtx.fillText(state.won ? '★ YOU REACHED THE TOP ★' : line, 320, 76);
   hudCtx.font = '29px system-ui, sans-serif';
-  if (state.won) { hudCtx.fillStyle = '#7a4a38'; hudCtx.fillText(`${state.jumps} jumps · ${fmtTime(state.time)} — press R to run it again`, 320, 132); }
-  else { hudCtx.fillStyle = '#b3541e'; hudCtx.fillText(message, 320, 132); }
+  if (state.won) { hudCtx.fillStyle = '#7a4a38'; hudCtx.fillText(`${state.jumps} jumps · ${fmtTime(state.time)} — press R to run it again`, 320, 128); }
+  else { hudCtx.fillStyle = '#b3541e'; hudCtx.fillText(message, 320, 128); }
+  hudCtx.font = '22px system-ui, sans-serif'; hudCtx.fillStyle = '#7a4a38';
+  hudCtx.fillText(`AIM: ${aimHand.toUpperCase()} HAND · STATS: ${hudHand().toUpperCase()} WRIST`, 320, 178);
   hudTex.needsUpdate = true;
   elStats.textContent = line; elMsg.textContent = state.won ? 'You reached the top! Press R to run it again.' : message;
 }
 
 // ---------- game state ----------
 const state = {
-  mode: 'ready',            // ready (standing) | flying | won
+  mode: 'ready',            // ready (standing) | flying | sliding (dropping down a wall face) | won
   jumps: 0, time: 0, timerOn: false, won: false,
   vel: new THREE.Vector3(),
-  feet: new THREE.Vector3(ROUTE[0].x, ROUTE[0].h, ROUTE[0].z),
+  feet: new THREE.Vector3(padPos(ROUTE[0]).x, ROUTE[0].h, padPos(ROUTE[0]).z),
   standing: null,           // surface rect we're standing on
-  lastLanded: null          // {x, z, surf} — respawn point
+  lastLanded: null,         // {x, z, surf} — respawn point
+  launchSurf: null, maxY: 0, leftLaunch: false   // flight bookkeeping (see landing rule)
 };
 state.standing = routeSurfs[0];
 state.lastLanded = { x: state.feet.x, z: state.feet.z, surf: routeSurfs[0] };
@@ -327,7 +520,7 @@ function activatePad(p) {
   p.mesh.material = PAD_ON.clone();
   if (p.goal) { winRun(); return; }
   sfx.pad();
-  setMessage(`Pad ${pads.filter(q => q.active).length}/${pads.length}!`);
+  setMessage(`Pad ${pads.filter(q => q.active).length}/${pads.length} — ${p.name}!`);
   drawHUD();
 }
 function checkPad() { // standing on a pad?
@@ -346,7 +539,7 @@ function resetRun() {
   state.mode = 'ready'; state.jumps = 0; state.time = 0; state.timerOn = false; state.won = false;
   skyUni.uFlash.value = 0;
   pads.forEach(p => { p.active = false; p.mesh.material = PAD_OFF.clone(); });
-  state.feet.set(ROUTE[0].x, ROUTE[0].h, ROUTE[0].z);
+  state.feet.set(padPos(ROUTE[0]).x, ROUTE[0].h, padPos(ROUTE[0]).z);
   state.standing = routeSurfs[0];
   state.lastLanded = { x: state.feet.x, z: state.feet.z, surf: routeSurfs[0] };
   syncRig(); setMessage('Step on the pads. Reach the top of the tower.');
@@ -354,18 +547,56 @@ function resetRun() {
   state.jumps = 0; drawHUD();     // (activation doesn't cost a jump; keep the counter clean)
 }
 
-// ---------- the leap ----------
-const _fwd = new THREE.Vector3();
-function facingDir() { // horizontal facing of the camera (headset or mouse-look)
-  camera.getWorldDirection(_fwd); _fwd.y = 0;
-  if (_fwd.lengthSq() < 1e-6) _fwd.set(0, 0, -1);
-  return _fwd.normalize();
+// ---------- aim: the HAND in VR, look direction on desktop ----------
+const rayCtrl = {}, gripCtrl = {};   // by handedness: 'left' | 'right'
+const _q = new THREE.Quaternion(), _dir = new THREE.Vector3(), _pn = new THREE.Vector3();
+function aimDirection() { // full 3D unit direction the leap will follow
+  if (renderer.xr.isPresenting && rayCtrl[aimHand]) {
+    rayCtrl[aimHand].getWorldQuaternion(_q);
+    return _dir.set(0, 0, -1).applyQuaternion(_q).normalize();   // controller's pointing axis
+  }
+  camera.getWorldDirection(_dir);                                 // desktop mouse-look / XR fallback
+  return _dir.normalize();
 }
+function facingDir() { // horizontal facing, used only for thumbstick shuffling
+  camera.getWorldDirection(_dir); _dir.y = 0;
+  if (_dir.lengthSq() < 1e-6) _dir.set(0, 0, -1);
+  return _dir.normalize();
+}
+
+// ---------- flight physics (shared shape: real flight & preview) ----------
+// Landing rule: a surface catches you when you cross its top falling — except
+// the surface you just launched from, which only catches you again once you've
+// risen well above it (straight-up hop) or left its footprint (running leap).
+function canLandOn(s, ctx) {
+  return s !== ctx.launchSurf || ctx.maxY > s.y + 0.25 || ctx.leftLaunch;
+}
+function stepFlight(p, v, ctx, dt) {
+  // integrates one step; mutates p/v/ctx; returns 'fly' | 'land' | 'wall' | 'street'
+  const prev = ctx.prev.copy(p);
+  v.y -= GRAVITY * dt;
+  p.addScaledVector(v, dt);
+  ctx.maxY = Math.max(ctx.maxY, p.y);
+  const ls = ctx.launchSurf;
+  if (ls && !ctx.leftLaunch && (p.x < ls.x0 || p.x > ls.x1 || p.z < ls.z0 || p.z > ls.z1)) ctx.leftLaunch = true;
+  if (v.y <= 0) {
+    const s = surfaceAt(p.x, p.z, prev.y + 0.001);
+    if (s && prev.y >= s.y && p.y <= s.y && canLandOn(s, ctx)) { p.y = s.y; ctx.surf = s; return 'land'; }
+  }
+  const hit = wallHit(prev, p);
+  if (hit) { p.set(hit.x, hit.y, hit.z); return 'wall'; }
+  if (p.y < 0) { p.y = 0; return 'street'; }
+  return 'fly';
+}
+
+// ---------- the leap ----------
 function leap() {
   if (state.mode !== 'ready') return;
   audio();
-  const d = facingDir();
-  state.vel.set(d.x * LEAP_VX, LEAP_VY, d.z * LEAP_VX);
+  const d = aimDirection().clone();
+  state.vel.copy(d).multiplyScalar(LAUNCH_SPEED);   // hand angle IS the trajectory — no fixed split
+  state.launchSurf = state.standing;
+  state.maxY = state.feet.y; state.leftLaunch = false;
   state.mode = 'flying';
   state.jumps++;
   state.timerOn = true;
@@ -392,8 +623,8 @@ function fallToStreet() {
   checkPad(); drawHUD();
 }
 
-// ---------- arc preview (while standing): sampled points + landing ring ----------
-const ARC_PTS = 90;
+// ---------- arc preview: simulates the EXACT flight above, walls included ----------
+const ARC_PTS = 240;
 const arcGeo = new THREE.BufferGeometry();
 arcGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ARC_PTS * 3), 3));
 const arcLine = new THREE.Line(arcGeo, new THREE.LineBasicMaterial({ color: 0x2fbfae, transparent: true, opacity: 0.55 }));
@@ -402,21 +633,24 @@ const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.8, 28),
   new THREE.MeshBasicMaterial({ color: 0x2fbfae, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
 ring.rotation.x = -Math.PI / 2; scene.add(ring);
 
-function predictLanding() { // simulate the exact leap physics, return {x,y,z,hit,surf}
-  const d = facingDir();
-  let p = state.feet.clone(), v = new THREE.Vector3(d.x * LEAP_VX, LEAP_VY, d.z * LEAP_VX);
-  const pts = [p.clone()]; const dt = 0.05;
-  for (let i = 0; i < ARC_PTS - 1; i++) {
-    const prev = p.clone();
-    v.y -= GRAVITY * dt; p.addScaledVector(v, dt);
-    if (v.y <= 0) {
-      const s = surfaceAt(p.x, p.z, prev.y + 0.001);
-      if (s && prev.y >= s.y && p.y <= s.y) { pts.push(new THREE.Vector3(p.x, s.y, p.z)); return { pts, x: p.x, y: s.y, z: p.z, hit: true, surf: s }; }
-    }
-    if (p.y < 0) { pts.push(new THREE.Vector3(p.x, 0, p.z)); return { pts, x: p.x, y: 0, z: p.z, hit: false, surf: null }; }
+function predictLanding() {
+  const d = aimDirection().clone();
+  const p = state.feet.clone(), v = d.multiplyScalar(LAUNCH_SPEED);
+  const ctx = { launchSurf: state.standing, maxY: p.y, leftLaunch: false, surf: null, prev: new THREE.Vector3() };
+  const pts = [p.clone()]; const dt = 0.04;
+  let outcome = 'street';
+  for (let i = 0; i < 400; i++) {
+    const r = stepFlight(p, v, ctx, dt);
     pts.push(p.clone());
+    if (r === 'land') { outcome = 'land'; break; }
+    if (r === 'street') { outcome = 'street'; break; }
+    if (r === 'wall') {   // arc ends at the wall face, then drops straight down it
+      v.set(0, Math.min(v.y, 0), 0);
+      for (let j = 0; j < 200 && p.y > 0; j++) { v.y -= GRAVITY * dt; p.y = Math.max(0, p.y + v.y * dt); pts.push(p.clone()); }
+      outcome = 'street'; break;
+    }
   }
-  return { pts, x: p.x, y: p.y, z: p.z, hit: false, surf: null };
+  return { pts, x: p.x, y: p.y, z: p.z, hit: outcome === 'land', surf: ctx.surf };
 }
 function updatePreview() {
   const show = state.mode === 'ready';
@@ -424,12 +658,13 @@ function updatePreview() {
   if (!show) return;
   const r = predictLanding();
   const pos = arcGeo.attributes.position;
+  const n = Math.min(ARC_PTS, r.pts.length);
   for (let i = 0; i < ARC_PTS; i++) {
     const p = r.pts[Math.min(i, r.pts.length - 1)];
     pos.setXYZ(i, p.x, p.y + 0.05, p.z);
   }
   pos.needsUpdate = true;
-  arcGeo.setDrawRange(0, r.pts.length);
+  arcGeo.setDrawRange(0, n);
   const onPad = r.hit && pads.some(p => !p.goal && Math.abs(r.y - p.y) < 0.6 && Math.abs(r.x - p.x) <= p.size/2 && Math.abs(r.z - p.z) <= p.size/2);
   const col = !r.hit ? 0xff5040 : (onPad ? 0xffb52e : 0x2fbfae);
   arcLine.material.color.setHex(col); ring.material.color.setHex(col);
@@ -437,12 +672,13 @@ function updatePreview() {
 }
 
 // ---------- input: desktop ----------
-let yaw = 0, pitch = 0;                    // camera default looks down -Z; the route runs toward -Z
+let yaw = 0, pitch = 0;                    // route runs toward -Z
 const keys = {};
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space') { e.preventDefault(); leap(); }
   if (e.code === 'KeyR') resetRun();
+  if (e.code === 'KeyH') setAimHand(aimHand === 'right' ? 'left' : 'right');
 });
 addEventListener('keyup', e => keys[e.code] = false);
 renderer.domElement.addEventListener('click', () => {
@@ -452,7 +688,7 @@ renderer.domElement.addEventListener('click', () => {
 addEventListener('mousemove', e => {
   if (!document.pointerLockElement) return;
   yaw -= e.movementX * 0.0022; pitch -= e.movementY * 0.0022;
-  pitch = THREE.MathUtils.clamp(pitch, -1.25, 1.25);
+  pitch = THREE.MathUtils.clamp(pitch, -1.25, 1.45);   // you can look (and aim) steeply up now
 });
 function desktopMove(dt) {
   if (state.mode !== 'ready' || !state.standing) return;
@@ -471,6 +707,49 @@ function clampToStanding() {
   state.feet.z = THREE.MathUtils.clamp(state.feet.z, s.z0 + m, s.z1 - m);
   syncRig();
 }
+
+// ---------- controllers (ray = aim, grip = wrist) ----------
+const aimBeams = {};
+for (let i = 0; i < 2; i++) {
+  const rc = renderer.xr.getController(i);
+  const beamGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -7)]);
+  const beamLine = new THREE.Line(beamGeo, new THREE.LineBasicMaterial({ color: 0xffb52e, transparent: true, opacity: 0.4 }));
+  rc.add(beamLine);
+  rc.addEventListener('connected', e => {
+    rayCtrl[e.data.handedness] = rc;
+    aimBeams[e.data.handedness] = beamLine;
+    refreshAimBeams();
+  });
+  rc.addEventListener('disconnected', () => refreshAimBeams());
+  player.add(rc);
+  const gc = renderer.xr.getControllerGrip(i);
+  gc.addEventListener('connected', e => { gripCtrl[e.data.handedness] = gc; attachWristHud(); });
+  player.add(gc);
+}
+function refreshAimBeams() {
+  for (const hand of ['left', 'right']) if (aimBeams[hand]) aimBeams[hand].visible = hand === aimHand;
+}
+function attachWristHud() {
+  const g = gripCtrl[hudHand()];
+  if (!g) return;
+  g.add(wristHud);
+  wristHud.position.set(0, -0.028, -0.02);
+  wristHud.rotation.set(Math.PI / 2, 0, 0);
+}
+function setAimHand(hand) {
+  if (hand !== 'left' && hand !== 'right') return;
+  aimHand = hand;
+  try { localStorage.setItem('jumpAimHand', hand); } catch (e) {}
+  document.querySelectorAll('input[name="aimhand"]').forEach(el => el.checked = el.value === hand);
+  attachWristHud();
+  refreshAimBeams();
+  setMessage(`Aim hand: ${hand.toUpperCase()} — raise it to aim higher`);
+  drawHUD();
+}
+document.querySelectorAll('input[name="aimhand"]').forEach(el => {
+  el.checked = el.value === aimHand;
+  el.addEventListener('change', () => setAimHand(el.value));
+});
 
 // ---------- input: WebXR ----------
 document.getElementById('entervr').onclick = async () => {
@@ -498,6 +777,12 @@ function xrInput(dt) {
       if (down && !btnWasDown.has(key)) { btnWasDown.add(key); leap(); }
       if (!down) btnWasDown.delete(key);
     }
+    // thumbstick click (index 3) on either controller = switch aiming hand
+    {
+      const key = src.handedness + '3', down = gp.buttons[3] && gp.buttons[3].pressed;
+      if (down && !btnWasDown.has(key)) { btnWasDown.add(key); setAimHand(aimHand === 'right' ? 'left' : 'right'); }
+      if (!down) btnWasDown.delete(key);
+    }
     // thumbstick shuffle while standing
     if (state.mode === 'ready' && state.standing && gp.axes.length >= 4) {
       const ax = gp.axes[2], ay = gp.axes[3];
@@ -511,9 +796,21 @@ function xrInput(dt) {
     }
   }
 }
+// Palm gate for the wrist HUD: palm facing the GROUND = hidden; tilt palm UP = panel appears.
+// (Grip space: -Y is the palm side on standard Quest controllers; hysteresis avoids flicker.)
+function updateWristHud() {
+  if (!renderer.xr.isPresenting) { wristHud.visible = false; return; }
+  const g = gripCtrl[hudHand()];
+  if (!g) { wristHud.visible = false; return; }
+  g.getWorldQuaternion(_q);
+  _pn.set(0, -1, 0).applyQuaternion(_q);                  // palm direction in world space
+  const d = _pn.y;                                        // +1 = palm straight up, -1 = palm to the ground
+  wristHud.visible = wristHud.visible ? d > 0.12 : d > 0.38;
+}
 
 // ---------- main loop ----------
 const clock = new THREE.Clock();
+const flightCtx = { launchSurf: null, maxY: 0, leftLaunch: false, surf: null, prev: new THREE.Vector3() };
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
 
@@ -525,14 +822,19 @@ function tick() {
   }
 
   if (state.mode === 'flying') {
-    const prevY = state.feet.y;
+    flightCtx.launchSurf = state.launchSurf; flightCtx.maxY = state.maxY;
+    flightCtx.leftLaunch = state.leftLaunch; flightCtx.surf = null;
+    const r = stepFlight(state.feet, state.vel, flightCtx, dt);
+    state.maxY = flightCtx.maxY; state.leftLaunch = flightCtx.leftLaunch;
+    if (r === 'land') landOn(flightCtx.surf);
+    else if (r === 'wall') { state.mode = 'sliding'; state.vel.set(0, Math.min(state.vel.y, 0), 0); }
+    else if (r === 'street') fallToStreet();
+    syncRig();
+  } else if (state.mode === 'sliding') {
+    // pinned to the wall face: no bounce, no horizontal drift, straight down to the street
     state.vel.y -= GRAVITY * dt;
-    state.feet.addScaledVector(state.vel, dt);
-    if (state.vel.y <= 0) {
-      const s = surfaceAt(state.feet.x, state.feet.z, prevY + 0.001);
-      if (s && prevY >= s.y && state.feet.y <= s.y) landOn(s);
-    }
-    if (state.mode === 'flying' && state.feet.y < 0) fallToStreet();
+    state.feet.y += state.vel.y * dt;
+    if (state.feet.y <= 0) { state.feet.y = 0; fallToStreet(); }
     syncRig();
   }
 
@@ -540,6 +842,7 @@ function tick() {
   skyUni.uFlash.value = Math.max(0, skyUni.uFlash.value - dt * 0.5);
   beam.material.opacity = 0.13 + Math.sin(performance.now() * 0.002) * 0.05;
 
+  updateWristHud();
   updatePreview();
   drawHUD();
   renderer.render(scene, camera);
