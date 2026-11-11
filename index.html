@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>JUMP — Recreation Prototype v0.5</title>
+<title>JUMP — Recreation Prototype v0.6</title>
 <style>
   html,body{margin:0;padding:0;background:#fdf6ea;color:#5b2a1e;font-family:system-ui,sans-serif;overflow:hidden}
   #ui{position:fixed;top:0;left:0;right:0;padding:12px 16px;z-index:10;pointer-events:none;
@@ -27,12 +27,11 @@
 </head>
 <body>
 <div id="ui">
-  <h1>JUMP <span style="font-size:12px;letter-spacing:1px;color:#b3541e">v0.5 · NEW YORK + THE WAVE</span></h1>
-  <p>Leap the rooftops of New York to the top of One World Trade Center. Land <b>on the glowing pads</b> — a roof alone doesn't count.
-     Your <b>hand aims the jump</b>: raise your arm to fly higher and farther, point level to drop short. Fewer jumps wins.
-     And out at sea a <b>300-foot wave</b> is coming — it makes landfall in <b>6:00</b>. Be above it (or on the tower top) when it arrives.</p>
+  <h1>JUMP <span style="font-size:12px;letter-spacing:1px;color:#b3541e">v0.6 · NEW YORK</span></h1>
+  <p>Leap the rooftops of New York to the top of One World Trade Center. Land <b>anywhere on the next roof</b> — the whole rooftop counts; the glowing pad just marks the spot.
+     Your <b>hand aims the jump</b>: raise your arm to fly higher and farther, point level to drop short. Fewer jumps wins.</p>
   <div id="stats">JUMPS 0 · PADS 0/8 · 0:00</div>
-  <div id="msg">Step on the pads. Reach the top of the tower.</div>
+  <div id="msg">Leap roof to roof — the whole rooftop counts. Reach the top of the tower.</div>
   <button id="entervr">Enter VR</button>
   <div id="aimset">Aiming hand:
     <label><input type="radio" name="aimhand" value="right" checked> Right</label>
@@ -46,7 +45,7 @@
 import * as THREE from 'three';
 
 /* ============================================================
-   JUMP — recreation prototype v0.3
+   JUMP — recreation prototype v0.6
    One mechanic: the leap. v0.2 changes (Dan's in-headset notes):
    · Aim comes from the HAND (full 3D aim direction × fixed speed,
      gravity makes the curve) — raise the hand to elevate the arc.
@@ -59,20 +58,15 @@ import * as THREE from 'three';
    · Stats HUD lives on the WRIST of the non-aiming hand,
      half-size, palm-gated: palm down = hidden, palm up = shown.
    v0.3 adds (Dan, Nov 10 evening):
-   · THE WAVE: a 300 ft (91.4 m) tsunami visible from the start is
-     the timer — landfall at 6:00. Below 91.4 m when it arrives =
-     game over; above it, it passes under you. Stylised fake water
-     (shader wall + foam), NOT a fluid sim. The wave material is
-     fog-EXEMPT but opacity-graded, so it reads as a faint looming
-     silhouette THROUGH the city's fog from far away and grows
-     solid as it nears (v0.2 fog itself is unchanged).
-   · One WTC stretched to 99 m so the goal survives the wave; the
-     final ascent is a chain of hovering sky platforms (the
-     original game's signature) from One Vanderbilt to the top.
+   · (v0.6: the tsunami was REMOVED entirely — see the v0.6 note
+     below. Landfall, the height rule and the wave roar are gone.)
+   · One WTC stands 99 m; the final ascent is a chain of hovering
+     sky platforms (the original game's signature) from One
+     Vanderbilt to the top.
    · Original Web-Audio score + city ambience: traffic volume
-     follows your height (never fully gone), calm spy-thriller-
-     style music 0:00–4:00 crossfading to panic 4:00–6:00, and a
-     wave roar that grows as landfall nears. No sampled music.
+     follows your height (never fully gone — a clear floor even
+     at the top of the tower), calm spy-thriller-style music
+     throughout the run. No sampled music.
    v0.4 fixes (Dan's v0.3 in-headset notes, §9 of the notes file):
    · ONE preview arc, emitted from the AIMING HAND (v0.3 drew it
      from the feet, plus a stray gold beam — the beam is gone).
@@ -86,11 +80,10 @@ import * as THREE from 'three';
    · Real roads: asphalt street texture with sidewalks; the
      mesh-grid ground is gone. Castle clutter and mystery
      circles removed; Met Life's circles are now a clock (hands).
-   · The wave is a living breaker: curling overhanging crest,
-     bubbling foam, spray particles — not a flat sliding wall.
+   · (The v0.4 wave body was removed with the wave in v0.6.)
    · Audio: cinematic re-synthesis (strings / piano / brass /
-     soft percussion) and a traffic bed that is actually audible
-     (0.55 max gain, pass-by events), still altitude-scaled.
+     soft percussion) and a traffic bed that is actually audible,
+     still altitude-scaled.
    v0.5 (Dan's v0.4 in-headset verdict: "2/10 vs the original's
    8/10" — a prove-it build):
    · PHYSICS FIRST: every building is built from axis-aligned box
@@ -115,6 +108,35 @@ import * as THREE from 'three';
      face, overhanging curled crest, bowed plan (centre leads),
      undulating crest height — with bigger spray/splash particle
      pools doing the foam and churn. The foam TUBE is gone.
+   v0.6 (Dan, Nov 10 late — "let's uncomplicate this"):
+   · THE WAVE IS GONE. Mesh, trailing swell, foam, spray, the
+     landfall timer, the below-91.4 m game-over, the wave HUD
+     line and the wave roar — all removed. The score keeps only
+     its calm phase (the panic grading's trigger is gone). Win =
+     the top of One WTC in fewest jumps, as before the wave.
+   · PALETTE: buildings are RED — single flat Lambert reds, so
+     the shade difference between faces comes ONLY from the one
+     directional sun's angle, never from baked per-face colours.
+     Everything else (ground, streets, sidewalks, clutter, trim)
+     is dull gray. Signature exceptions kept: Chrysler's silver
+     crown, NY Life's gold pyramid, Woolworth / 40 Wall's
+     copper-green pyramids, the Statue of Liberty's verdigris.
+   · BOLD BLACK OUTLINES on every building (added later the
+     same evening, from the same photos): the original carries
+     a comic-book black edge on every building, from every
+     angle. Implemented as thin black boxes merged into ONE
+     mesh — WebGL lines are 1px and vanish at distance; these
+     bars have real thickness. Visual only; physics untouched.
+   · THE STATUE OF LIBERTY stands on a stepped stone island at
+     the harbour (south-east) edge of the map: stepped robe,
+     crown spikes, raised torch arm, pedestal. Scenery only.
+   · LANDING TRIGGERS = WHOLE ROOFS: landing anywhere on a
+     roof-level surface of a route building activates its pad —
+     the trigger is the roof; the glowing pad is just a marker.
+     (v0.5 triggered only inside a 3.4 m square at the pad.)
+   · TRAFFIC: louder floor — the altitude factor now bottoms at
+     0.20 (was 0.125), so the busy-city bed is clearly audible
+     even on top of the 99 m tower and swells toward the street.
    ============================================================ */
 
 // ---------- leap tuning ----------
@@ -123,12 +145,6 @@ const STEP_DT = 1 / 240;   // fixed physics step (flight AND preview — see ste
 const GRAVITY = 12;      // m/s^2 (a touch gamey, keeps arcs snappy)
 const WALK_SPEED = 2.4;  // m/s shuffle speed on a roof
 const EYE = 1.7;         // camera height above feet
-// ---------- v0.3: the wave ----------
-const WAVE_TIME = 360;         // seconds from first leap to landfall — the wave IS the timer
-const WAVE_HEIGHT = 91.4;      // 300 ft, in metres: be at/above this when it arrives
-const WAVE_OFFSHORE_X = 470;   // where the wall sits (east, out at sea) at t=0
-const WAVE_SHORE_X = 112;      // landfall position at t=WAVE_TIME (just east of the route)
-const WAVE_END_X = -260;       // where the post-landfall sweep finishes (~7 s later)
 
 // ---------- renderer / scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -219,14 +235,14 @@ scene.add(sun);
 {
   const cv = document.createElement('canvas'); cv.width = cv.height = 256;
   const c = cv.getContext('2d');
-  c.fillStyle = '#4c443c'; c.fillRect(0, 0, 256, 256);                 // asphalt
+  c.fillStyle = '#504e4a'; c.fillRect(0, 0, 256, 256);                 // asphalt
   for (let i = 0; i < 900; i++) {                                      // asphalt grain
     c.fillStyle = `rgba(${Math.random() > 0.5 ? '255,240,220' : '0,0,0'},${0.03 + Math.random() * 0.05})`;
     c.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
   }
-  c.fillStyle = '#8d8172'; c.fillRect(28, 28, 200, 200);               // sidewalk frame
-  c.fillStyle = '#7a6f60'; c.fillRect(40, 40, 176, 176);               // block interior (mostly covered)
-  c.strokeStyle = 'rgba(240,230,210,0.5)'; c.lineWidth = 2; c.setLineDash([14, 12]);
+  c.fillStyle = '#8a8a86'; c.fillRect(28, 28, 200, 200);               // sidewalk frame
+  c.fillStyle = '#767672'; c.fillRect(40, 40, 176, 176);               // block interior (mostly covered)
+  c.strokeStyle = 'rgba(235,235,230,0.45)'; c.lineWidth = 2; c.setLineDash([14, 12]);
   c.beginPath(); c.moveTo(128, 0); c.lineTo(128, 22); c.moveTo(128, 234); c.lineTo(128, 256);
   c.moveTo(0, 128); c.lineTo(22, 128); c.moveTo(234, 128); c.lineTo(256, 128); c.stroke();  // centre dashes
   const gtex = new THREE.CanvasTexture(cv);
@@ -247,7 +263,6 @@ function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a
 const rand = mulberry32(20261110);
 const pick = arr => arr[Math.floor(rand() * arr.length)];
 
-const waveBuildings = [];   // {x,z,h} for every registered building (foam bursts / submersion as the wave passes)
 
 // ---------- surfaces & colliders ----------
 // Landable flat tops: {x0,x1,z0,z1,y}. Solid boxes for wall collision: {x0,x1,z0,z1,y0,y1}.
@@ -315,30 +330,35 @@ function wallHit(prev, cur) {
   return best;
 }
 
-// ---------- v0.5 materials: flat-shaded, NO windows ----------
-// Dan's direction after seeing the original JUMP reference photos:
-// drop the window shader entirely. Buildings are flat-shaded solid
-// forms in the original's grey / off-white palette (a red accent
-// here and there). Quality comes from SHAPE — setbacks, ridges,
-// overhangs, parapets — and from the sun making every face read a
-// different value. MeshLambertMaterial + the directional sun does
-// exactly that, and buildings receive real shadows again (the v0.4
-// custom shader could not receive them).
+// ---------- materials: flat-shaded, NO windows ----------
+// v0.5 dropped the window shader entirely (Dan, after seeing the
+// original JUMP reference photos). v0.6 palette (Dan): buildings
+// are RED Lambert forms; everything else is dull gray. Quality
+// comes from SHAPE — setbacks, ridges, overhangs, parapets — and
+// from the sun making every face read a different value purely
+// by light angle. MeshLambertMaterial + the directional sun does
+// exactly that, and buildings receive real shadows.
 const matCache = new Map();
 function flatMat(color) {
   if (!matCache.has(color)) matCache.set(color, new THREE.MeshLambertMaterial({ color }));
   return matCache.get(color);
 }
-const PAL = {   // the original JUMP palette: sunlit greys and off-whites
-  white: 0xefe9dc, stone: 0xddd5c2, stone2: 0xcfc6ae, grey: 0xbdbec0,
-  grey2: 0xa9adb2, warm: 0xd9c49c, dark: 0x8d8a83, slate: 0xc3ccd1,
+const PAL = {   // v0.6 palette (Dan): buildings RED, everything else dull gray.
+  // Each part carries ONE flat Lambert red — the shade differences
+  // between a building's faces come ONLY from the sun's angle on
+  // each face, never from baked per-face colours.
+  white: 0xda8a72, stone: 0xc05a41, stone2: 0xb04a34, grey: 0xa03c2c,
+  grey2: 0x8f3425, warm: 0xc96a4a, dark: 0x6e271c, slate: 0xb5503a,
   red: 0xa83a2c, red2: 0xbf4a34
 };
-const trimMat = flatMat(0xf5eedd);
-const silverMat = flatMat(0xd8dce0);
-const copperMat = flatMat(0x5d8570);   // Woolworth / 40 Wall stepped pyramids
-const goldMat = flatMat(0xd9a441);     // NY Life pyramid
-const greenBandMat = flatMat(0x527a68);
+const trimMat = flatMat(0x9d9a92);     // dull gray trim (parapets, caps, billboards)
+const silverMat = flatMat(0xc9ccd0);   // light gray "silver" — Chrysler crown, spires, masts
+const copperMat = flatMat(0x5d8570);   // Woolworth / 40 Wall stepped pyramids (signature copper-green, kept)
+const goldMat = flatMat(0xd9a441);     // NY Life pyramid + Liberty's torch flame (signature gold, kept)
+const greenBandMat = flatMat(0x74726c); // McGraw-Hill bands — dulled to gray per the v0.6 palette
+const grayMat = flatMat(0x8f8c85);     // dull gray stone (Liberty's pedestal / island)
+const grayDarkMat = flatMat(0x74726c);
+const libertyMat = flatMat(0x5f9a80);  // Statue of Liberty verdigris — the colour is half the identifier
 const cityGroup = new THREE.Group(); scene.add(cityGroup);
 
 // ---------- ONE geometry for mesh, surface AND collider (v0.5) ----------
@@ -351,11 +371,44 @@ const cityGroup = new THREE.Group(); scene.add(cityGroup);
 // visible. That class of bug is now impossible by construction.
 //   o.col === false → purely visual (thin fins/panels ≤0.5 m proud)
 //   o.surf === false → solid collider, no landable top (wall bands)
+// ---------- v0.6: BOLD BLACK OUTLINES (Dan, from the original's photos) ----------
+// The original JUMP's buildings carry a bold black edge — a
+// comic-book outline visible from every angle. WebGL line width
+// is 1px (too thin to read as bold past a few metres) and an
+// inverted hull per part would double the mesh count, so every
+// part() box instead grows twelve thin black BOX bars along its
+// edges, all merged into ONE static mesh: one draw call, real
+// 0.16 m thickness that still reads across the city. Purely
+// visual — surfaces and colliders are never touched.
+const EDGE_T = 0.16;
+const edgeVerts = [];
+function pushEdgeBox(cx, cy, cz, w, h, d) {
+  const x0 = cx - w / 2, x1 = cx + w / 2, y0 = cy - h / 2, y1 = cy + h / 2, z0 = cz - d / 2, z1 = cz + d / 2;
+  const F = [
+    [x0,y0,z1, x1,y0,z1, x1,y1,z1,  x0,y0,z1, x1,y1,z1, x0,y1,z1],   // +z
+    [x1,y0,z0, x0,y0,z0, x0,y1,z0,  x1,y0,z0, x0,y1,z0, x1,y1,z0],   // -z
+    [x1,y0,z1, x1,y0,z0, x1,y1,z0,  x1,y0,z1, x1,y1,z0, x1,y1,z1],   // +x
+    [x0,y0,z0, x0,y0,z1, x0,y1,z1,  x0,y0,z0, x0,y1,z1, x0,y1,z0],   // -x
+    [x0,y1,z1, x1,y1,z1, x1,y1,z0,  x0,y1,z1, x1,y1,z0, x0,y1,z0],   // +y
+    [x0,y0,z0, x1,y0,z0, x1,y0,z1,  x0,y0,z0, x1,y0,z1, x0,y0,z1]    // -y
+  ];
+  for (const f of F) edgeVerts.push(...f);
+}
+function addPartEdges(cx, cz, w, base, hgt, d) {
+  const t = EDGE_T, cy = base + hgt / 2;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1])
+    pushEdgeBox(cx + sx * w / 2, cy, cz + sz * d / 2, t, hgt + t, t);          // 4 vertical corner bars
+  for (const y of [base, base + hgt]) {
+    for (const sz of [-1, 1]) pushEdgeBox(cx, y, cz + sz * d / 2, w + t, t, t); // top/bottom bars along X
+    for (const sx of [-1, 1]) pushEdgeBox(cx + sx * w / 2, y, cz, t, t, d + t); // top/bottom bars along Z
+  }
+}
 function part(g, cx, cz, w, base, hgt, d, mat, o = {}) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, d), mat);
   m.position.set(cx, base + hgt / 2, cz);
   m.castShadow = o.shadow !== false; m.receiveShadow = true;
   g.add(m);
+  addPartEdges(cx, cz, w, base, hgt, d);   // v0.6 black outline bars (visual only)
   if (o.col === false) return m;
   addCollider(cx, cz, w, d, base, base + hgt);
   if (o.surf === false) return m;
@@ -368,8 +421,8 @@ const partSurfaces = new Set();   // every part() surface must have a matching c
 // ---------- the route: 8 recognisable NYC landmarks climbing to One WTC ----------
 // Heights are Dan's compressed game scale (real NYC heights squeezed to a
 // playable climb), ordered so the pads stair upward ~6–7 m per hop.
-// v0.3: One WTC is stretched to 99 m — above the 91.4 m wave — and the
-// last leg (Vanderbilt, 46 m → WTC top, 99 m) is a hovering sky-platform
+// One WTC stands 99 m (the city's clear tallest) and the last leg
+// (Vanderbilt, 46 m → WTC top, 99 m) is a hovering sky-platform
 // chain (SKY_PLATFORMS below), since no single 21 m/s leap gains 53 m.
 const ROUTE = [
   { kind: 'flatiron',  name: 'Flatiron Building',          x:   0, z:    0, w: 22, d: 22, h:  9, padDz: 1.5 },
@@ -383,13 +436,12 @@ const ROUTE = [
 ];
 const padPos = r => ({ x: r.x + (r.padDx || 0), z: r.z + (r.padDz || 0) });
 
-// v0.5: every landmark is a massing model built ONLY from part()
+// Every landmark is a massing model built ONLY from part()
 // boxes — stepped setbacks, ridges and signature tops — flat-shaded
-// in the original's grey/off-white palette. No windows anywhere.
+// red (v0.6 palette; signature tops keep their colours). No windows.
 function buildLandmark(r) {
   const g = new THREE.Group(); cityGroup.add(g);
   const { x, z, w, d, h } = r;
-  waveBuildings.push({ x, z, h });
   let top = null;
   if (r.kind === 'flatiron') {
     // The wedge, as three stepped boxes narrowing to the prow (-Z):
@@ -474,7 +526,17 @@ function buildLandmark(r) {
   }
   return top;
 }
-const routeSurfs = ROUTE.map(r => buildLandmark(r));
+const routeSurfs = [], routeRoofSurfs = [];
+ROUTE.forEach(r => {
+  const before = new Set(surfaces);
+  routeSurfs.push(buildLandmark(r));
+  // v0.6: the landing TRIGGER is the whole roof — every surface
+  // this build added whose top is exactly the building's height
+  // counts as "on the roof": the main roof AND any same-height
+  // roof parts (e.g. all three of the Flatiron's stepped boxes,
+  // which together are its full rooftop).
+  routeRoofSurfs.push(surfaces.filter(sf => !before.has(sf) && Math.abs(sf.y - r.h) < 1e-6));
+});
 
 // ---------- v0.5: 20 more recognisable NYC landmarks (scenic) ----------
 // Same construction as the route: part() box massing with a
@@ -482,32 +544,31 @@ const routeSurfs = ROUTE.map(r => buildLandmark(r));
 // route's leap corridors on the same street grid; fillers skip
 // their footprints.
 const SCENIC = [
-  { kind: 'nylife',   name: 'New York Life Building',    x: -38,  z:  -14, w: 18, d: 18, h: 30, tint: '#c8b18a' },
-  { kind: 'helmsley', name: 'Helmsley Building',         x: -84,  z:  -30, w: 18, d: 18, h: 32, tint: '#b98d5f' },
-  { kind: 'chanin',   name: 'Chanin Building',           x: -98,  z:  -82, w: 16, d: 16, h: 30, tint: '#a5714a' },
-  { kind: 'rock',     name: '30 Rockefeller Plaza',      x: -42,  z: -122, w: 20, d: 14, h: 36, tint: '#b7a58e' },
-  { kind: 'grandcentral', name: 'Grand Central Terminal', x: -16, z: -138, w: 24, d: 18, h: 14, tint: '#c9bda6' },
-  { kind: 'stpatrick', name: "St. Patrick's Cathedral",  x:  14,  z: -162, w: 12, d: 20, h: 15, tint: '#cfc4ae' },
-  { kind: 'hearst',   name: 'Hearst Tower',              x: -48,  z: -166, w: 16, d: 16, h: 30, tint: '#a8895f' },
-  { kind: 'mcgraw',   name: 'McGraw-Hill Building',      x: -74,  z: -178, w: 18, d: 16, h: 28, tint: '#7d9a90' },
-  { kind: 'dailynews', name: 'Daily News Building',      x: -112, z: -138, w: 18, d: 14, h: 26, tint: '#c4b49a' },
-  { kind: 'sanremo',  name: 'The San Remo',              x: -138, z: -118, w: 20, d: 16, h: 34, tint: '#c2a878' },
-  { kind: 'dakota',   name: 'The Dakota',                x: -138, z:  -66, w: 20, d: 16, h: 22, tint: '#b39a72' },
-  { kind: 'cpt',      name: 'Central Park Tower',        x: -64,  z: -216, w: 16, d: 16, h: 52, tint: '#a8b2b8' },
-  { kind: 'one57',    name: 'One57',                     x: -32,  z: -204, w: 18, d: 18, h: 44, tint: '#93a7b4' },
-  { kind: 'steinway', name: 'Steinway Tower',            x:   2,  z: -228, w:  8, d: 14, h: 40, tint: '#c9a184' },
-  { kind: 'timesq1',  name: 'One Times Square',          x:  30,  z:   56, w: 12, d: 12, h: 30, tint: '#b56a4a' },
-  { kind: 'timesq4',  name: '4 Times Square',            x: -22,  z:   62, w: 18, d: 18, h: 38, tint: '#a89a86' },
-  { kind: 'boa',      name: 'Bank of America Tower',     x: -58,  z:   46, w: 18, d: 18, h: 40, tint: '#aebfc2' },
+  { kind: 'nylife',   name: 'New York Life Building',    x: -38,  z:  -14, w: 18, d: 18, h: 30, tint: '#b5503a' },
+  { kind: 'helmsley', name: 'Helmsley Building',         x: -84,  z:  -30, w: 18, d: 18, h: 32, tint: '#a8452f' },
+  { kind: 'chanin',   name: 'Chanin Building',           x: -98,  z:  -82, w: 16, d: 16, h: 30, tint: '#9c4030' },
+  { kind: 'rock',     name: '30 Rockefeller Plaza',      x: -42,  z: -122, w: 20, d: 14, h: 36, tint: '#bb5a41' },
+  { kind: 'grandcentral', name: 'Grand Central Terminal', x: -16, z: -138, w: 24, d: 18, h: 14, tint: '#c05a41' },
+  { kind: 'stpatrick', name: "St. Patrick's Cathedral",  x:  14,  z: -162, w: 12, d: 20, h: 15, tint: '#c9715a' },
+  { kind: 'hearst',   name: 'Hearst Tower',              x: -48,  z: -166, w: 16, d: 16, h: 30, tint: '#a03c2c' },
+  { kind: 'mcgraw',   name: 'McGraw-Hill Building',      x: -74,  z: -178, w: 18, d: 16, h: 28, tint: '#8f3425' },
+  { kind: 'dailynews', name: 'Daily News Building',      x: -112, z: -138, w: 18, d: 14, h: 26, tint: '#b5503a' },
+  { kind: 'sanremo',  name: 'The San Remo',              x: -138, z: -118, w: 20, d: 16, h: 34, tint: '#bb5a41' },
+  { kind: 'dakota',   name: 'The Dakota',                x: -138, z:  -66, w: 20, d: 16, h: 22, tint: '#a8452f' },
+  { kind: 'cpt',      name: 'Central Park Tower',        x: -64,  z: -216, w: 16, d: 16, h: 52, tint: '#9c4030' },
+  { kind: 'one57',    name: 'One57',                     x: -32,  z: -204, w: 18, d: 18, h: 44, tint: '#b04a34' },
+  { kind: 'steinway', name: 'Steinway Tower',            x:   2,  z: -228, w:  8, d: 14, h: 40, tint: '#c05a41' },
+  { kind: 'timesq1',  name: 'One Times Square',          x:  30,  z:   56, w: 12, d: 12, h: 30, tint: '#b5503a' },
+  { kind: 'timesq4',  name: '4 Times Square',            x: -22,  z:   62, w: 18, d: 18, h: 38, tint: '#a8452f' },
+  { kind: 'boa',      name: 'Bank of America Tower',     x: -58,  z:   46, w: 18, d: 18, h: 40, tint: '#bb5a41' },
   { kind: 'liberty',  name: 'One Liberty Plaza',         x: 150,  z:  -58, w: 22, d: 22, h: 36, tint: '#4c4a48' },
-  { kind: 'wall40',   name: '40 Wall Street',            x: 150,  z: -112, w: 16, d: 16, h: 34, tint: '#b98d5f' },
-  { kind: 'pine70',   name: '70 Pine Street',            x: 124,  z: -162, w: 16, d: 16, h: 38, tint: '#bd8a5e' },
+  { kind: 'wall40',   name: '40 Wall Street',            x: 150,  z: -112, w: 16, d: 16, h: 34, tint: '#a8452f' },
+  { kind: 'pine70',   name: '70 Pine Street',            x: 124,  z: -162, w: 16, d: 16, h: 38, tint: '#9c4030' },
 ];
 function buildScenic(sd) {
   const g = new THREE.Group(); cityGroup.add(g);
   const { x, z, w, d, h } = sd;
   const m = flatMat(sd.tint);
-  waveBuildings.push({ x, z, h });
   part(g, x, z, w, 0, h, d, m);
   switch (sd.kind) {
     case 'nylife':   // gold stepped pyramid
@@ -544,13 +605,13 @@ function buildScenic(sd) {
         part(g, x + ox, z, 3.0, h + 10.2, 2.3, 5.0, trimMat);
       } break;
     case 'dakota':   // steep stepped gable roof
-      part(g, x, z, w * 0.8, h, 1.8, d * 0.8, flatMat(0x4a3b32));
-      part(g, x, z, w * 0.55, h + 1.8, 1.8, d * 0.55, flatMat(0x4a3b32));
-      part(g, x, z, w * 0.3, h + 3.6, 1.6, d * 0.3, flatMat(0x4a3b32)); break;
+      part(g, x, z, w * 0.8, h, 1.8, d * 0.8, flatMat(0x55524e));
+      part(g, x, z, w * 0.55, h + 1.8, 1.8, d * 0.55, flatMat(0x55524e));
+      part(g, x, z, w * 0.3, h + 3.6, 1.6, d * 0.3, flatMat(0x55524e)); break;
     case 'cpt':
       part(g, x, z, w * 0.9, h, 1.6, d * 0.9, trimMat); break;
     case 'one57':
-      part(g, x, z, w * 0.92, h, 3, d * 0.92, flatMat(0x8ea6b0)); break;
+      part(g, x, z, w * 0.92, h, 3, d * 0.92, flatMat(0x8b8d89)); break;
     case 'steinway':
       part(g, x, z, w * 0.8, h, 3, d * 0.8, m); part(g, x, z, w * 0.55, h + 3, 3, d * 0.55, m); break;
     case 'timesq1':  // billboard slabs (visual) + antenna
@@ -561,8 +622,8 @@ function buildScenic(sd) {
       part(g, x + 3, z + 3, 0.4, h, 7.5, 0.4, silverMat);
       part(g, x + 3, z + 3, 0.16, h + 7.5, 1.8, 0.16, silverMat); break;
     case 'boa':      // stepped crown + corner spire
-      part(g, x, z, w * 0.6, h, 3, d * 0.6, flatMat(0xb9cbce));
-      part(g, x, z, w * 0.38, h + 3, 2.5, d * 0.38, flatMat(0xb9cbce));
+      part(g, x, z, w * 0.6, h, 3, d * 0.6, flatMat(0xa9a9a4));
+      part(g, x, z, w * 0.38, h + 3, 2.5, d * 0.38, flatMat(0xa9a9a4));
       part(g, x - 3.4, z - 3.4, 0.45, h, 8, 0.45, silverMat); break;
     case 'liberty':  // the black slab's cap band
       part(g, x, z, w * 0.94, h, 1.4, d * 0.94, flatMat(0x35322f)); break;
@@ -576,6 +637,49 @@ function buildScenic(sd) {
   }
 }
 SCENIC.forEach(buildScenic);
+
+// ---------- v0.6: the Statue of Liberty (Dan: "it has to look like the thing") ----------
+// One unmistakable icon, on a stepped stone island at the harbour
+// (south-east) edge of the map. Scenery only — not a route stop.
+// Built from the same part() boxes as everything else: a stepped
+// robe, a crown with seven spikes, the raised right arm holding a
+// gold torch, the tablet against her left side, all on a stone
+// pedestal. The verdigris is kept: the colour is half the read.
+const LIBERTY = { x: 182, z: 53 };
+function buildLiberty() {
+  const g = new THREE.Group(); cityGroup.add(g);
+  const { x, z } = LIBERTY;
+  // the island: two stepped dull-gray stone tiers
+  part(g, x, z, 30, 0, 1.2, 30, grayDarkMat);
+  part(g, x, z, 24, 1.2, 0.8, 24, grayMat);
+  const plaza = 2.0;                                     // island top
+  // pedestal: stepped stone shaft with a cap
+  part(g, x, z, 9.5, plaza, 1.2, 9.5, grayDarkMat);
+  part(g, x, z, 6.4, plaza + 1.2, 6.5, 6.4, grayMat);
+  part(g, x, z, 7.8, plaza + 7.7, 1.0, 7.8, grayDarkMat);
+  const py = plaza + 8.7;        // her feet ≈ 10.7 m; figure ≈ 13 m; torch top ≈ 23.5 m
+  // the robe: three stepped tiers narrowing as they rise (a box-built cone)
+  part(g, x, z, 3.6, py, 3.4, 3.6, libertyMat);
+  part(g, x, z, 2.7, py + 3.4, 2.8, 2.7, libertyMat);
+  part(g, x, z, 2.0, py + 6.2, 2.4, 2.0, libertyMat);    // torso
+  // head, crown band, and the seven crown spikes
+  part(g, x, z, 1.0, py + 8.6, 1.1, 1.0, libertyMat);
+  part(g, x, z, 1.35, py + 9.7, 0.3, 1.35, libertyMat);
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 6 - 0.5) * 2.2;                       // the fan of spikes across the crown
+    part(g, x + Math.sin(a) * 0.6, z - 0.15 - Math.cos(a) * 0.18, 0.13, py + 9.9, 0.9, 0.13, libertyMat, { col: false, shadow: false });
+  }
+  // raised RIGHT arm (north side — she faces the city): stepped
+  // segments climbing out from the shoulder, gold torch on top
+  part(g, x, z - 1.3, 0.75, py + 7.0, 1.1, 1.5, libertyMat);    // shoulder bridge
+  part(g, x, z - 1.95, 0.6, py + 7.6, 2.0, 0.6, libertyMat);    // upper arm
+  part(g, x, z - 2.3, 0.5, py + 9.4, 1.9, 0.5, libertyMat);     // forearm
+  part(g, x, z - 2.45, 0.34, py + 11.3, 0.8, 0.34, libertyMat); // torch handle
+  part(g, x, z - 2.45, 0.62, py + 12.1, 0.75, 0.62, goldMat);   // torch flame (gold)
+  // the tablet, held against her left (south) side
+  part(g, x, z + 1.35, 0.55, py + 5.2, 1.7, 1.15, libertyMat);
+}
+buildLiberty();
 
 // pillar of light above One WTC so you can see where you're headed
 const towerTop = ROUTE[ROUTE.length - 1];
@@ -598,7 +702,7 @@ const SKY_PLATFORMS = [
   { x: 93.3, z: -105.1, y: 81 }, { x: 78.0, z:  -98.0, y: 88 },
 ];
 {
-  const platMat = new THREE.MeshLambertMaterial({ color: 0x8f2a20 });
+  const platMat = new THREE.MeshLambertMaterial({ color: 0xa83a2c });   // palette red
   const edgeMat = new THREE.MeshBasicMaterial({ color: 0x54f2ff });
   for (const sp of SKY_PLATFORMS) {
     const slab = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.55, 5.4), platMat);
@@ -609,244 +713,7 @@ const SKY_PLATFORMS = [
   }
 }
 
-// ---------- THE WAVE (v0.3 mechanics, v0.4 body) ----------
-// Same deal, same numbers: 300 ft (91.4 m), landfall at exactly
-// 6:00 on the run clock. The BODY is rebuilt: v0.3's flat wall +
-// white cylinder crest read as a sliding rectangle, so the front is
-// now a curved parametric surface — a steep face curling over into
-// an overhanging crest — displaced every frame by layered noise in
-// the vertex shader (the crest boils hardest), with a physical foam
-// tube along the lip, a churning foam skirt at the base, recycled
-// spray/splash particles, and foam bursts at building bases as the
-// sweep passes. Still stylised fake water: no fluid simulation.
-// FOG: materials set fog:false, but opacity is graded by distance —
-// far away a FAINT looming silhouette through the fog; close, solid.
-function makeSplashTexture() {
-  const c = document.createElement('canvas'); c.width = c.height = 64;
-  const ctx = c.getContext('2d');
-  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
-  g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.55, 'rgba(255,255,255,0.5)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
-}
-const splashTex = makeSplashTexture();
-const waveGroup = new THREE.Group(); scene.add(waveGroup);
-const WAVE_LEN = 620;
-const waveUniforms = {
-  uTime: { value: 0 }, uOpacity: { value: 0.30 },
-  uDeep: { value: new THREE.Color(0x14425e) },
-  uFace: { value: new THREE.Color(0x2e7ea6) },
-  uFoam: { value: new THREE.Color(0xeaf7ff) }
-};
-const waveUniforms2 = {   // trailing swell: shares the clock, own opacity
-  uTime: waveUniforms.uTime, uOpacity: { value: 0.16 },
-  uDeep: waveUniforms.uDeep, uFace: waveUniforms.uFace, uFoam: waveUniforms.uFoam
-};
-{
-  // v0.5 wave body: a shaped BREAKER built as an extruded
-  // cross-section, not a plane. Profile (local X: negative toward
-  // the city): the face rises steep, the crest CURLS OVER toward
-  // the city (lip overhangs ~3.4 m), then closes down the back.
-  // In plan the wall BOWS — the centre leads the flanks by ~14 m —
-  // and crest height undulates ±5% along its length, so the
-  // silhouette is broken before any shader churn or particles.
-  // The v0.4 foam TUBE along the lip is gone (Dan: "a shower
-  // curtain with a tube on top").
-  const prof = [ // [xOffset, y] front-bottom → crest → back-bottom
-    [7.5, 0], [3.4, 12], [1.8, 30], [1.1, 50], [1.0, 68], [1.6, 82],
-    [0.4, 89], [-2.0, 92.0], [-3.4, 93.0], [-1.0, 94.6], [2.6, 93.0],
-    [6.0, 84], [8.4, 60], [9.6, 32], [10.2, 0]
-  ];
-  const ZSEG = 110, zHalf = WAVE_LEN / 2, PC = prof.length;
-  const positions = [], uvsA = [], indices = [];
-  for (let j = 0; j <= ZSEG; j++) {
-    const z = -zHalf + (j / ZSEG) * WAVE_LEN;
-    const bow = -14 * Math.cos((z / WAVE_LEN) * Math.PI);          // centre leads the flanks
-    const crestMul = 1 + 0.035 * Math.sin(z * 0.043) + 0.02 * Math.sin(z * 0.011 + 2.0);
-    for (let i = 0; i < PC; i++) {
-      const bx = prof[i][0], y = prof[i][1];
-      positions.push(bow + bx, y > 40 ? y * crestMul : y, z);
-      uvsA.push(j / ZSEG, i / (PC - 1));
-    }
-  }
-  for (let j = 0; j < ZSEG; j++) for (let i = 0; i < PC - 1; i++) {
-    const a = j * PC + i, b = a + PC;
-    indices.push(a, b, a + 1, b, b + 1, a + 1);
-  }
-  const waveGeo = new THREE.BufferGeometry();
-  waveGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
-  waveGeo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvsA), 2));
-  waveGeo.setIndex(indices);
-  waveGeo.computeVertexNormals();
-  const waveVert = `
-      uniform float uTime;
-      varying vec2 vUv; varying float vFoamN; varying vec3 vNorm; varying float vY01;
-      float n2(vec2 q){ return sin(q.x) * 0.55 + sin(q.y) * 0.45; }
-      void main(){
-        vUv = uv; vY01 = clamp(position.y / ${WAVE_HEIGHT.toFixed(1)}, 0.0, 1.0);
-        vec3 p = position;
-        float churn = n2(vec2(p.z * 0.055 + uTime * 0.9, p.y * 0.11 - uTime * 1.7))
-                    + 0.6 * n2(vec2(p.z * 0.16 - uTime * 1.6, p.y * 0.30 + uTime * 2.6));
-        float crestAmt = smoothstep(55.0, 92.0, p.y);
-        p += normal * churn * mix(0.7, 3.6, crestAmt);
-        p.x += sin(p.z * 0.11 + uTime * 1.3) * crestAmt * 0.9;   // the lip writhes sideways
-        vFoamN = churn; vNorm = normalMatrix * normal;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }`;
-  const waveFrag = `
-      uniform vec3 uDeep; uniform vec3 uFace; uniform vec3 uFoam;
-      uniform float uOpacity; uniform float uTime;
-      varying vec2 vUv; varying float vFoamN; varying vec3 vNorm; varying float vY01;
-      float hash21(vec2 q){ return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
-      void main(){
-        vec3 base = mix(uDeep, uFace, vY01);
-        base += sin(vY01 * 46.0 - uTime * 2.2 + sin(vUv.x * 90.0) * 1.4) * 0.05;
-        // foam: animated cellular noise, thickest at the crest and the base
-        float cell = hash21(floor(vec2(vUv.x * 340.0, vY01 * 26.0 - uTime * 1.4)));
-        float foamBand = smoothstep(0.86, 0.99, vY01 + vFoamN * 0.05);
-        float boil = smoothstep(0.45, 1.1, vFoamN + cell * 0.55) * smoothstep(0.55, 0.98, vY01);
-        float baseFoam = smoothstep(0.10, 0.0, vY01) * (0.5 + 0.5 * cell);
-        vec3 col = mix(base, uFoam, clamp(foamBand + boil * 0.85 + baseFoam * 0.8, 0.0, 1.0));
-        float shade = 0.72 + 0.28 * abs(normalize(vNorm).x);
-        gl_FragColor = vec4(col * shade, uOpacity);
-      }`;
-  const waveMat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
-    uniforms: waveUniforms, vertexShader: waveVert, fragmentShader: waveFrag
-  });
-  const front = new THREE.Mesh(waveGeo, waveMat);
-  front.position.set(0, 0, -80);
-  front.renderOrder = 6; front.frustumCulled = false;
-  waveGroup.add(front);
-  // A second, smaller swell trailing ~55 m behind the main wall —
-  // depth: two lines of white water coming, not one flat curtain.
-  const swellMat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
-    uniforms: waveUniforms2, vertexShader: waveVert, fragmentShader: waveFrag
-  });
-  const swell = new THREE.Mesh(waveGeo, swellMat);
-  swell.scale.set(1, 0.58, 1);
-  swell.position.set(58, 0, -80);
-  swell.renderOrder = 5; swell.frustumCulled = false;
-  waveGroup.add(swell);
-}
-// Boiling foam skirt where the face meets the ground.
-const foamSkirt = new THREE.Mesh(
-  new THREE.PlaneGeometry(15, WAVE_LEN),
-  new THREE.MeshBasicMaterial({ map: splashTex, color: 0xeaf7ff, transparent: true, opacity: 0.2, depthWrite: false, fog: false, side: THREE.DoubleSide })
-);
-foamSkirt.rotation.x = -Math.PI / 2;
-foamSkirt.position.set(-7, 0.7, -80);
-foamSkirt.renderOrder = 6; foamSkirt.frustumCulled = false;
-waveGroup.add(foamSkirt);
-// Spray (off the crest lip) + splash (at the base): recycled CPU
-// particle pools in wave-local space — the group carries them along.
-function makePuffs(n, size, opacity) {
-  const geo = new THREE.BufferGeometry();
-  const arr = new Float32Array(n * 3); for (let i = 0; i < n; i++) arr[i * 3 + 1] = -60;
-  geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: splashTex, color: 0xf2fbff, size, transparent: true, opacity, depthWrite: false, fog: false, sizeAttenuation: true }));
-  pts.frustumCulled = false; pts.renderOrder = 8;
-  waveGroup.add(pts);
-  return { pts, vel: new Float32Array(n * 3), life: new Float32Array(n), n };
-}
-const spray = makePuffs(420, 3.4, 0.85);
-const splash = makePuffs(340, 4.2, 0.8);
-function seedPuff(sys, i, crest) {
-  const pos = sys.pts.geometry.attributes.position.array, v = sys.vel;
-  const z = -80 + (Math.random() - 0.5) * (WAVE_LEN - 20);
-  if (crest) {
-    pos[i*3] = -11 + (Math.random() - 0.5) * 12; pos[i*3+1] = WAVE_HEIGHT - Math.random() * 6; pos[i*3+2] = z;
-    v[i*3] = -(2.5 + Math.random() * 5); v[i*3+1] = (Math.random() - 0.35) * 6; v[i*3+2] = (Math.random() - 0.5) * 2;
-    sys.life[i] = 1.6 + Math.random() * 1.8;
-  } else {
-    pos[i*3] = -2 + (Math.random() - 0.5) * 13; pos[i*3+1] = Math.random() * 3; pos[i*3+2] = z;
-    v[i*3] = -(1 + Math.random() * 4); v[i*3+1] = 3 + Math.random() * 7; v[i*3+2] = (Math.random() - 0.5) * 2;
-    sys.life[i] = 0.9 + Math.random() * 1.1;
-  }
-}
-function stepPuffs(sys, dt, active, crest) {
-  const pos = sys.pts.geometry.attributes.position.array, v = sys.vel;
-  for (let i = 0; i < sys.n; i++) {
-    if (sys.life[i] <= 0) { if (active && Math.random() < 0.25) seedPuff(sys, i, crest); else continue; }
-    sys.life[i] -= dt;
-    if (sys.life[i] <= 0) { pos[i*3+1] = -60; continue; }
-    v[i*3+1] -= 5.5 * dt;
-    pos[i*3] += v[i*3] * dt; pos[i*3+1] += v[i*3+1] * dt; pos[i*3+2] += v[i*3+2] * dt;
-    if (!crest && pos[i*3+1] < 0.3) pos[i*3+1] = 0.3;
-  }
-  sys.pts.geometry.attributes.position.needsUpdate = true;
-}
-waveGroup.position.set(WAVE_OFFSHORE_X, 0, 0);
-// Foam bursts where the sweep front passes a building base (small pool).
-const foamPool = [];
-{
-  const fm = new THREE.MeshBasicMaterial({ map: splashTex, color: 0xffffff, transparent: true, opacity: 0, fog: false, depthWrite: false });
-  for (let i = 0; i < 36; i++) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), fm.clone());
-    m.rotation.x = -Math.PI / 2; m.position.y = 0.35; m.visible = false; m.renderOrder = 8;
-    scene.add(m); foamPool.push({ mesh: m, t: 99 });
-  }
-}
-let foamIdx = 0;
-function foamBurst(x, z) {
-  const f = foamPool[foamIdx++ % foamPool.length];
-  f.t = 0; f.mesh.position.x = x; f.mesh.position.z = z; f.mesh.visible = true;
-}
-// Pure wave logic (also exposed on window.__JUMP_V05__ for build tests):
-const waveFrontXAt = t => t >= WAVE_TIME ? null
-  : WAVE_OFFSHORE_X + (WAVE_SHORE_X - WAVE_OFFSHORE_X) * THREE.MathUtils.clamp(t / WAVE_TIME, 0, 1);
-const waveDestroys = (t, height) => t >= WAVE_TIME && height < WAVE_HEIGHT;
-const waveState = { landfallDone: false, survived: false, sweepT: 99, hitIdx: 0, sorted: [] };
-function updateWave(dt) {
-  waveUniforms.uTime.value += dt;
-  let frontX, prox;
-  if (!waveState.landfallDone) {
-    frontX = waveFrontXAt(state.time); if (frontX === null) frontX = WAVE_SHORE_X;
-    prox = THREE.MathUtils.clamp(state.time / WAVE_TIME, 0, 1);
-  } else {
-    waveState.sweepT = Math.min(1, waveState.sweepT + dt / 7);
-    frontX = WAVE_SHORE_X + (WAVE_END_X - WAVE_SHORE_X) * waveState.sweepT;
-    prox = 1;
-    // foam bursts as the sweep front passes building bases (east → west)
-    while (waveState.hitIdx < waveState.sorted.length && waveState.sorted[waveState.hitIdx].x > frontX) {
-      const b = waveState.sorted[waveState.hitIdx++]; foamBurst(b.x, b.z);
-    }
-  }
-  waveGroup.position.x = frontX;
-  // Opacity grading = the through-fog read: faint silhouette far away → solid up close.
-  const fade = THREE.MathUtils.clamp(1 - (frontX - WAVE_SHORE_X) / (WAVE_OFFSHORE_X - WAVE_SHORE_X), 0, 1);
-  waveUniforms.uOpacity.value = 0.30 + 0.68 * fade;
-  waveUniforms2.uOpacity.value = waveUniforms.uOpacity.value * 0.5;
-  foamSkirt.material.opacity = (0.22 + 0.60 * fade) * (waveState.landfallDone ? 1 : 0.85);
-  const active = state.time > 0 || waveState.landfallDone;
-  stepPuffs(spray, dt, active, true);
-  stepPuffs(splash, dt, active, false);
-  for (const f of foamPool) {
-    if (f.t > 1.6) { f.mesh.visible = false; continue; }
-    f.t += dt;
-    const k = Math.max(0, 1 - f.t / 1.6);
-    f.mesh.material.opacity = 0.75 * k;
-    const sc = 0.5 + f.t * 0.9; f.mesh.scale.set(sc, sc, sc);
-  }
-  return prox;
-}
-function checkLandfall() {
-  if (waveState.landfallDone || state.time < WAVE_TIME) return;
-  waveState.landfallDone = true; waveState.sweepT = 0; waveState.hitIdx = 0;
-  waveState.sorted = [...waveBuildings].sort((a, b) => b.x - a.x);   // all buildings exist by now (fillers included)
-  if (state.won) { waveState.survived = true; return; }
-  if (waveDestroys(state.time, state.feet.y)) {
-    state.gameOver = true; state.mode = 'gameover'; state.timerOn = false;
-    skyUni.uFlash.value = 0.7;
-    sfx.fall();
-    setMessage('The wave took the city — you were below 300 ft');
-  } else {
-    waveState.survived = true;
-    setMessage('The wave passes beneath you — you\'re above it!');
-  }
-  drawHUD();
-}
+// ---------- (the wave lived here until v0.6 — removed at Dan's direction) ----------
 
 // ---------- dense filler city on a street grid (blocks out to the fog) ----------
 function overlapsRoute(x, z, w, d, margin = 7) {
@@ -855,13 +722,10 @@ function overlapsRoute(x, z, w, d, margin = 7) {
 }
 const PARK = { x0: -124, x1: -66, z0: -174, z1: -36 };   // Central Park: the one deliberate gap
 function buildBlock(cx, cz, w, d, h) {
-  waveBuildings.push({ x: cx, z: cz, h });
   const g = new THREE.Group(); cityGroup.add(g);
-  // v0.5: the original's palette — sunlit greys/off-whites, ~1 in 6
-  // blocks a red accent (Dan's original red-city instinct, kept as
-  // seasoning rather than the whole meal).
-  const tone = rand() < 0.16 ? pick([PAL.red, PAL.red2])
-                             : pick([PAL.white, PAL.stone, PAL.stone2, PAL.grey, PAL.grey2, PAL.warm]);
+  // v0.6 palette: EVERY filler block is a red — variety comes from
+  // the red family plus the sun's shading, never from gray blocks.
+  const tone = pick([PAL.red, PAL.red2, PAL.stone, PAL.stone2, PAL.grey, PAL.grey2, PAL.warm, PAL.slate, PAL.white]);
   const m1 = flatMat(tone);
   part(g, cx, cz, w, 0, h, d, m1);
   const r = rand();
@@ -896,6 +760,7 @@ function buildBlock(cx, cz, w, d, h) {
     const w = 19 + rand() * 4.5, d = 19 + rand() * 4.5;
     if (cx > PARK.x0 - 4 && cx < PARK.x1 + 4 && cz > PARK.z0 - 4 && cz < PARK.z1 + 4) continue;
     if (overlapsRoute(cx, cz, w, d)) continue;
+    if (Math.abs(cx - LIBERTY.x) < w / 2 + 19 && Math.abs(cz - LIBERTY.z) < d / 2 + 19) continue;   // Liberty island stays clear
     // Fillers near the route stay low so leap corridors are never walled off;
     // farther out they can rise into a proper skyline.
     let nearRoute = Infinity;
@@ -904,21 +769,33 @@ function buildBlock(cx, cz, w, d, h) {
     buildBlock(cx, cz, w, d, h);
     placed++;
   }
-  console.log('JUMP v0.5 filler blocks:', placed);
+  console.log('JUMP v0.6 filler blocks:', placed);
 }
+// ---------- v0.6: the merged black-outline mesh ----------
+// Every part() in the city (route, scenic, Liberty, fillers) has
+// registered its twelve edge bars by now; they become ONE mesh.
+{
+  const eg = new THREE.BufferGeometry();
+  eg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(edgeVerts), 3));
+  const outlineMesh = new THREE.Mesh(eg, new THREE.MeshBasicMaterial({ color: 0x14100e }));
+  outlineMesh.frustumCulled = false;
+  scene.add(outlineMesh);
+  console.log('JUMP v0.6 outline mesh verts:', edgeVerts.length / 3);
+}
+
 // Central Park: green rectangle, a pale path, cone trees — no buildings, not landable
 {
   const park = new THREE.Mesh(new THREE.PlaneGeometry(PARK.x1 - PARK.x0, PARK.z1 - PARK.z0),
-    new THREE.MeshLambertMaterial({ color: 0x6d8f57 }));
+    new THREE.MeshLambertMaterial({ color: 0x71806a }));
   park.rotation.x = -Math.PI / 2;
   park.position.set((PARK.x0 + PARK.x1) / 2, 0.04, (PARK.z0 + PARK.z1) / 2);
   park.receiveShadow = true; scene.add(park);
   const path = new THREE.Mesh(new THREE.PlaneGeometry(4, PARK.z1 - PARK.z0 - 8),
-    new THREE.MeshLambertMaterial({ color: 0xe8dcc2 }));
+    new THREE.MeshLambertMaterial({ color: 0xb9b7ac }));
   path.rotation.x = -Math.PI / 2;
   path.position.set((PARK.x0 + PARK.x1) / 2, 0.06, (PARK.z0 + PARK.z1) / 2);
   scene.add(path);
-  const treeMat = new THREE.MeshLambertMaterial({ color: 0x4e7a3e });
+  const treeMat = new THREE.MeshLambertMaterial({ color: 0x5f7263 });
   for (let i = 0; i < 46; i++) {
     const tx = PARK.x0 + 4 + rand() * (PARK.x1 - PARK.x0 - 8), tz = PARK.z0 + 4 + rand() * (PARK.z1 - PARK.z0 - 8);
     if (Math.abs(tx - (PARK.x0 + PARK.x1) / 2) < 3.4) continue;
@@ -927,7 +804,7 @@ function buildBlock(cx, cz, w, d, h) {
   }
 }
 
-// ---------- route pads ----------
+// ---------- route pads (v0.6: markers only — the TRIGGER is the whole roof, see routeRoofSurfs) ----------
 const PAD_OFF = new THREE.MeshLambertMaterial({ color: 0x0e3a3a, emissive: 0x54f2ff, emissiveIntensity: 1.5 });
 const PAD_ON  = new THREE.MeshLambertMaterial({ color: 0x4a3205, emissive: 0xffc84d, emissiveIntensity: 1.7 });
 const pads = ROUTE.map((r, i) => {
@@ -953,19 +830,23 @@ function tone(f0, f1, dur, type = 'sine', gain = 0.12, delay = 0) {
     o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
   } catch (e) { /* audio is garnish, never fatal */ }
 }
-// ---------- audio: city ambience + original score + wave roar (v0.4) ----------
+// ---------- audio: city ambience + original score (v0.6: the wave roar left with the wave) ----------
 // Everything is synthesised with Web Audio — no samples, no licensed music.
 // The score is an original D-minor composition (chord progression and
 // melody written for this game; no borrowed melody or theme).
-const ambienceFactor = h => 1 - 0.875 * THREE.MathUtils.clamp(h / 100, 0, 1); // 1.0 at street → 0.125 (floor) at 100 m
+const ambienceFactor = h => 1 - 0.80 * THREE.MathUtils.clamp(h / 100, 0, 1); // 1.0 at street → 0.20 floor at 100 m (v0.6: Dan must HEAR the city from the tower top)
 // Traffic loudness targets by altitude. v0.3 used a single 0.20-gain
 // brown-rumble layer under a 520 Hz lowpass: nearly all its energy sat
 // below 200 Hz, which Quest speakers/headphones barely reproduce — in
 // the headset it read as SILENCE (Dan heard no traffic at all). v0.4
 // runs two layers: rumble (body) + a mid-band wash around 850 Hz
 // (tyre hiss / engine band — where hearing and small speakers live).
-const trafficLevelsAt = h => { const f = ambienceFactor(h); return { factor: f, rumble: 0.50 * f, wash: 0.34 * f }; };
-const musicPanicAmt = t => THREE.MathUtils.clamp((t - 236) / 12, 0, 1);       // graded crossfade 3:56 → 4:08
+// v0.6 raises the floor again (factor now bottoms at 0.20): the
+// combined bed is 0.176 at 100 m — a busy city still clearly
+// audible on top of the tallest building — swelling to 0.88 at
+// street level. Mid-band wash stays the larger share: that is
+// the band small speakers actually reproduce.
+const trafficLevelsAt = h => { const f = ambienceFactor(h); return { factor: f, rumble: 0.48 * f, wash: 0.40 * f }; };
 let audioSys = null, audioBuilding = false;
 function buildAudio() {
   if (audioSys || audioBuilding) return;
@@ -976,25 +857,19 @@ function buildAudio() {
     const nd = nb.getChannelData(0);
     let last = 0;
     for (let i = 0; i < nd.length; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; nd[i] = (last * 3.2 + w * 0.14) * 0.6; } // brownish rumble + hiss
-    const mkLoop = rate => { const src = ac.createBufferSource(); src.buffer = nb; src.loop = true; src.playbackRate.value = rate; return src; };
     const trafficGain = ac.createGain(); trafficGain.gain.value = 0;
     const tf = ac.createBiquadFilter(); tf.type = 'lowpass'; tf.frequency.value = 700;
     tf.connect(trafficGain); trafficGain.connect(ac.destination);
     const trafficBand = ac.createGain(); trafficBand.gain.value = 0;
     const tb = ac.createBiquadFilter(); tb.type = 'bandpass'; tb.frequency.value = 850; tb.Q.value = 0.7;
     tb.connect(trafficBand); trafficBand.connect(ac.destination);
-    const roarGain = ac.createGain(); roarGain.gain.value = 0;
-    const rf = ac.createBiquadFilter(); rf.type = 'lowpass'; rf.frequency.value = 260;
-    const roarSrc = mkLoop(0.42); roarSrc.connect(rf); rf.connect(roarGain); roarGain.connect(ac.destination);
     const calmGain = ac.createGain(); calmGain.gain.value = 0; calmGain.connect(ac.destination);
-    const panicGain = ac.createGain(); panicGain.gain.value = 0; panicGain.connect(ac.destination);
-    audioSys = { ac, trafficGain, trafficBand, noiseBuf: nb, roarGain, calmGain, panicGain, step: 0, nextT: ac.currentTime + 0.15, bpm: 96 };
+    audioSys = { ac, trafficGain, trafficBand, noiseBuf: nb, calmGain, step: 0, nextT: ac.currentTime + 0.15, bpm: 96 };
     const tSrc = ac.createBufferSource(); tSrc.buffer = nb; tSrc.loop = true;
     tSrc.connect(tf); tSrc.start();
     const tSrc2 = ac.createBufferSource(); tSrc2.buffer = nb; tSrc2.loop = true; tSrc2.playbackRate.value = 1.7;
     tSrc2.connect(tb); tSrc2.start();
-    roarSrc.start();
-    audioSys.tSrc = tSrc; audioSys.rSrc = roarSrc;
+    audioSys.tSrc = tSrc;
   } catch (e) { /* audio stays garnish */ }
   audioBuilding = false;
 }
@@ -1049,13 +924,6 @@ function softKick(t, dest, vol) {
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
   o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.2);
 }
-function softHat(t, dest, vol) {
-  const ac = audioSys.ac, src = ac.createBufferSource(); src.buffer = audioSys.noiseBuf; src.playbackRate.value = 3;
-  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6000;
-  const g = ac.createGain();
-  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
-  src.connect(hp); hp.connect(g); g.connect(dest); src.start(t); src.stop(t + 0.06);
-}
 // D minor progression Dm – Bb – F – A (one bar each), calm melody picks from the chord tones.
 const CHORDS = [
   { bass: 73.42, tones: [293.66, 349.23, 440.00] },   // Dm
@@ -1065,25 +933,16 @@ const CHORDS = [
 ];
 const MEL = [0,-1,1,-1, 2,-1,1,0, -1,-1,0,-1, 1,-1,-1,-1];  // tone index per 8th step, -1 = rest (loops per bar with chord)
 function scheduleStep(step, t) {
+  // v0.6: CALM ONLY, for the whole run. The panic phase graded in
+  // as the wave approached; with the wave gone, its trigger is
+  // gone too — the score is the calm spy-thriller pattern.
   const bar = Math.floor(step / 16) % 4, s16 = step % 16, ch = CHORDS[bar];
-  const panic = musicPanicAmt(state.time);
-  if (panic < 0.98) {  // CALM (0:00–~4:00): strings carry the chord, piano picks the melody
-    if (s16 === 0) stringEnsemble(ch.tones, t, audioSys.calmGain, 0.045, 4.6);
-    if (s16 === 0 || s16 === 8) pianoPluck(ch.bass * 2, t, audioSys.calmGain, 0.16, 1.1);
-    const mi = MEL[s16];
-    if (mi >= 0) pianoPluck(ch.tones[mi] * 2, t, audioSys.calmGain, 0.10, 0.8);
-    if (bar === 3 && s16 === 0) brassSwell(220, t, audioSys.calmGain, 0.05, 3.2);
-    if (s16 % 4 === 0) softKick(t, audioSys.calmGain, 0.10);
-  }
-  if (panic > 0.02) {  // PANIC (graded in 3:56→4:08, full for the last 2 min): pedal tension + stabs + pulse
-    if (s16 % 4 === 0) stringEnsemble([146.83, 155.56, 293.66], t, audioSys.panicGain, 0.05, 1.1); // D + Eb rub
-    if (s16 === 0 || s16 === 8) brassSwell(146.83, t, audioSys.panicGain, 0.09, 0.9);
-    if (s16 % 2 === 0) pianoPluck(146.83, t, audioSys.panicGain, 0.13, 0.3);
-    if (s16 % 4 === 0) softKick(t, audioSys.panicGain, 0.20);
-    if (s16 % 2 === 1) softHat(t, audioSys.panicGain, 0.05);
-    if (s16 % 4 === 0) pianoPluck(587.33, t, audioSys.panicGain, 0.07, 0.5);
-    if (s16 % 4 === 2) pianoPluck(622.25, t, audioSys.panicGain, 0.065, 0.5);
-  }
+  if (s16 === 0) stringEnsemble(ch.tones, t, audioSys.calmGain, 0.045, 4.6);
+  if (s16 === 0 || s16 === 8) pianoPluck(ch.bass * 2, t, audioSys.calmGain, 0.16, 1.1);
+  const mi = MEL[s16];
+  if (mi >= 0) pianoPluck(ch.tones[mi] * 2, t, audioSys.calmGain, 0.10, 0.8);
+  if (bar === 3 && s16 === 0) brassSwell(220, t, audioSys.calmGain, 0.05, 3.2);
+  if (s16 % 4 === 0) softKick(t, audioSys.calmGain, 0.10);
 }
 function updateAudio() {
   if (!audioSys) return;
@@ -1091,14 +950,9 @@ function updateAudio() {
   const tl = trafficLevelsAt(Math.max(0, state.feet.y));
   audioSys.trafficGain.gain.setTargetAtTime(tl.rumble, now, 0.35);
   audioSys.trafficBand.gain.setTargetAtTime(tl.wash, now, 0.35);
-  const prox = THREE.MathUtils.clamp(state.time / WAVE_TIME, 0, 1);
-  const roar = 0.012 + prox * prox * 0.15 + (waveState.landfallDone ? 0.10 : 0);
-  audioSys.roarGain.gain.setTargetAtTime(Math.min(roar, 0.30), now, 0.4);
-  const panic = musicPanicAmt(state.time);
-  audioSys.calmGain.gain.setTargetAtTime(0.85 * (1 - panic), now, 0.5);
-  audioSys.panicGain.gain.setTargetAtTime(0.85 * panic, now, 0.5);
+  audioSys.calmGain.gain.setTargetAtTime(0.85, now, 0.5);
   if (!state.timerOn && !state.won && !state.gameOver) { audioSys.nextT = Math.max(audioSys.nextT, now + 0.1); return; }   // score runs with the run clock; keep scheduler clock synced while idle
-  const spb = 60 / (audioSys.bpm + panic * 34) / 2;               // 8th notes; panic phase pushes tempo 96 → 130
+  const spb = 60 / audioSys.bpm / 2;               // 8th notes at a steady calm 96 BPM
   while (audioSys.nextT < now + 0.35) { scheduleStep(audioSys.step++, audioSys.nextT); audioSys.nextT += spb; }
 }
 // test hooks (build verification): pure logic, no side effects
@@ -1115,7 +969,7 @@ function hopTest(from, to, pitchDeg) {
   ctx.launchSurf = launch; ctx.maxY = from.y; ctx.oy = -EYE;
   let outcome = 'timeout';
   for (let i = 0; i < 1600; i++) { const r = stepFlight(p, v, ctx, STEP_DT); if (r !== 'fly') { outcome = r; break; } }
-  return { outcome, x: ctx.feetPos.x, y: ctx.feetPos.y, z: ctx.feetPos.z, surfY: ctx.surf ? ctx.surf.y : null };
+  return { outcome, x: ctx.feetPos.x, y: ctx.feetPos.y, z: ctx.feetPos.z, surfY: ctx.surf ? ctx.surf.y : null, surf: ctx.surf };
 }
 function landGridTest() {
   // Drop-test a 5×5 grid of points on EVERY route roof and sky
@@ -1167,6 +1021,33 @@ function landTestAll() {
   }
   return { total, failCount: failures.length, failures: failures.slice(0, 40) };
 }
+function routeRoofTest() {
+  // v0.6: EVERY route roof landable edge-to-edge and corner-to-
+  // corner (Dan: "we can't have a roof that we can't land on
+  // completely"). A grid at ~1.4 m spacing plus every edge and
+  // corner of every roof-level surface of every route building,
+  // dropped from 30 m: each point must land on the surface that
+  // owns the top of its column (a part stacked ON the roof — a
+  // bulkhead, a pyramid tier — is a correct landing there).
+  let total = 0; const failures = [];
+  ROUTE.forEach((r, i) => {
+    for (const sf of routeRoofSurfs[i]) {
+      const nx = Math.max(2, Math.min(20, Math.ceil((sf.x1 - sf.x0) / 1.4)));
+      const nz = Math.max(2, Math.min(20, Math.ceil((sf.z1 - sf.z0) / 1.4)));
+      for (let a = 0; a <= nx; a++) for (let b = 0; b <= nz; b++) {
+        const x = sf.x0 + (sf.x1 - sf.x0) * (a / nx), z = sf.z0 + (sf.z1 - sf.z0) * (b / nz);
+        total++;
+        const pp = new THREE.Vector3(x, sf.y + 30, z), vv = new THREE.Vector3();
+        const ctx = newFlightCtx(); ctx.maxY = -1e9; ctx.leftLaunch = true;
+        let outcome = 'timeout';
+        for (let k = 0; k < 2400; k++) { const rr = stepFlight(pp, vv, ctx, STEP_DT); if (rr !== 'fly') { outcome = rr; break; } }
+        if (outcome !== 'land' || ctx.surf !== surfaceAt(x, z, 1e9))
+          failures.push(r.name + ' @' + x.toFixed(1) + ',' + z.toFixed(1) + ': ' + outcome);
+      }
+    }
+  });
+  return { total, failCount: failures.length, failures: failures.slice(0, 40) };
+}
 function wallTestAll() {
   // Fire a slightly-rising shot at each face of every route
   // building from 7 m out: every shot must end in a WALL hit —
@@ -1205,17 +1086,22 @@ function partSurfaceCheck() {
   }
   return { parts: partSurfaces.size, bad };
 }
-window.__JUMP_V05__ = { WAVE_TIME, WAVE_HEIGHT, WAVE_HEIGHT_FT: 300, waveFrontXAt, waveDestroys,
-                        ambienceFactor, trafficLevelsAt, musicPanicAmt,
-                        musicPhase: t => t < 240 ? 'calm' : 'panic',
+window.__JUMP_V06__ = { ambienceFactor, trafficLevelsAt,
+                        musicPhase: () => 'calm',
                         LAUNCH_SPEED, GRAVITY, STEP_DT, EYE,
-                        LANDMARK_COUNT: ROUTE.length + SCENIC.length,
+                        LANDMARK_COUNT: ROUTE.length + SCENIC.length + 1,   // + the Statue of Liberty
                         routeCount: ROUTE.length, scenicCount: SCENIC.length,
                         surfaceCount: () => surfaces.length, colliderCount: () => colliders.length,
-                        ROUTE, SKY_PLATFORMS, surfaceAt, hopTest, landGridTest,
-                        landTestAll, wallTestAll, partSurfaceCheck, VERSION: 'v0.5',
+                        ROUTE, SKY_PLATFORMS, LIBERTY, surfaceAt, hopTest, landGridTest,
+                        routeRoofTest, landTestAll, wallTestAll, partSurfaceCheck, VERSION: 'v0.6',
+                        routeRoofSurfs: () => routeRoofSurfs.map(a => a.length),
+                        padForSurface: sf => routeRoofSurfs.findIndex(a => a.includes(sf)),
+                        ensureAudio: () => { audio(); buildAudio(); return AC ? AC.state : 'none'; },
+                        audioState: () => AC ? AC.state : 'none',
+                        driveAudio: h => { state.feet.y = h; updateAudio(); return audioSys ? { rumble: audioSys.trafficGain.gain.value, wash: audioSys.trafficBand.gain.value } : null; },
                         partSurfaceCount: () => partSurfaces.size };
-window.__JUMP_V04__ = window.__JUMP_V05__;   // alias so older test scripts still run
+window.__JUMP_V05__ = window.__JUMP_V06__;   // aliases so older test scripts still run
+window.__JUMP_V04__ = window.__JUMP_V06__;
 
 const sfx = {
   leap: () => tone(300, 90, 0.22, 'sine', 0.10),
@@ -1237,7 +1123,7 @@ const hudCanvas = document.createElement('canvas'); hudCanvas.width = 640; hudCa
 const hudCtx = hudCanvas.getContext('2d');
 const hudTex = new THREE.CanvasTexture(hudCanvas);
 const wristHud = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.33, 0.136),           // ~half the v0.1 floating window (0.66 × 0.206); a touch taller in v0.3 for the wave line
+  new THREE.PlaneGeometry(0.33, 0.136),           // ~half the v0.1 floating window (0.66 × 0.206)
   new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false, side: THREE.DoubleSide })
 );
 wristHud.rotation.x = Math.PI / 2;                // face the palm side of the grip (-Y in grip space)
@@ -1247,29 +1133,24 @@ wristHud.visible = false;
 scene.add(wristHud);                              // re-parented to the HUD wrist once controllers connect
 const elStats = document.getElementById('stats'), elMsg = document.getElementById('msg');
 
-let message = 'Step on the pads. Reach the top of the tower.';
+let message = 'Leap roof to roof — the whole rooftop counts. Reach the top of the tower.';
 function fmtTime(s){ return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); }
 function drawHUD() {
-  const waveLeft = Math.max(0, WAVE_TIME - state.time);
   const line = `JUMPS ${state.jumps} · PADS ${pads.filter(p => p.active).length}/${pads.length} · ${fmtTime(state.time)}`;
   hudCtx.clearRect(0, 0, 640, 264);
   hudCtx.fillStyle = 'rgba(255,248,236,0.88)';
   hudCtx.beginPath(); hudCtx.roundRect(6, 6, 628, 252, 26); hudCtx.fill();
   hudCtx.textAlign = 'center';
   hudCtx.fillStyle = '#8c2f1d'; hudCtx.font = '700 44px system-ui, sans-serif';
-  hudCtx.fillText(state.gameOver ? '★ THE WAVE TOOK THE CITY ★' : state.won ? '★ YOU REACHED THE TOP ★' : line, 320, 72);
+  hudCtx.fillText(state.won ? '★ YOU REACHED THE TOP ★' : line, 320, 84);
   hudCtx.font = '29px system-ui, sans-serif';
-  if (state.won) { hudCtx.fillStyle = '#7a4a38'; hudCtx.fillText(`${state.jumps} jumps · ${fmtTime(state.time)} — press R to run it again`, 320, 122); }
-  else if (state.gameOver) { hudCtx.fillStyle = '#7a4a38'; hudCtx.fillText('Trigger / Space / R to try again', 320, 122); }
-  else { hudCtx.fillStyle = '#b3541e'; hudCtx.fillText(message, 320, 122); }
-  hudCtx.font = '700 27px system-ui, sans-serif';
-  hudCtx.fillStyle = waveLeft <= 120 ? '#a52a1c' : '#33627a';
-  hudCtx.fillText(state.gameOver ? 'WAVE: LANDFALL' : waveState.survived ? 'WAVE: PASSED BENEATH YOU' : `WAVE ${fmtTime(waveLeft)} · 300 FT — GET HIGH`, 320, 168);
+  if (state.won) { hudCtx.fillStyle = '#7a4a38'; hudCtx.fillText(`${state.jumps} jumps · ${fmtTime(state.time)} — press R to run it again`, 320, 140); }
+  else { hudCtx.fillStyle = '#b3541e'; hudCtx.fillText(message, 320, 140); }
   hudCtx.font = '22px system-ui, sans-serif'; hudCtx.fillStyle = '#7a4a38';
-  hudCtx.fillText(`AIM: ${aimHand.toUpperCase()} HAND · STATS: ${hudHand().toUpperCase()} WRIST`, 320, 216);
+  hudCtx.fillText(`AIM: ${aimHand.toUpperCase()} HAND · STATS: ${hudHand().toUpperCase()} WRIST`, 320, 200);
   hudTex.needsUpdate = true;
-  elStats.textContent = line + ` · WAVE ${fmtTime(waveLeft)}`;
-  elMsg.textContent = state.gameOver ? 'The wave took the city. Press R / trigger to try again.' : state.won ? 'You reached the top! Press R to run it again.' : message;
+  elStats.textContent = line;
+  elMsg.textContent = state.won ? 'You reached the top! Press R to run it again.' : message;
 }
 
 // ---------- game state ----------
@@ -1299,10 +1180,9 @@ function activatePad(p) {
   setMessage(`Pad ${pads.filter(q => q.active).length}/${pads.length} — ${p.name}!`);
   drawHUD();
 }
-function checkPad() { // standing on a pad?
-  for (const p of pads) {
-    if (!p.active && Math.abs(state.feet.y - p.y) < 0.6 &&
-        Math.abs(state.feet.x - p.x) <= p.size / 2 && Math.abs(state.feet.z - p.z) <= p.size / 2) activatePad(p);
+function checkPad() { // standing anywhere on a route roof? (v0.6: whole-roof triggers)
+  for (let i = 0; i < pads.length; i++) {
+    if (!pads[i].active && routeRoofSurfs[i].includes(state.standing)) activatePad(pads[i]);
   }
 }
 function winRun() {
@@ -1313,14 +1193,13 @@ function winRun() {
 }
 function resetRun() {
   state.mode = 'ready'; state.jumps = 0; state.time = 0; state.timerOn = false; state.won = false; state.gameOver = false;
-  waveState.landfallDone = false; waveState.survived = false; waveState.sweepT = 99; waveState.hitIdx = 0; waveState.sorted = [];
   if (audioSys) { audioSys.step = 0; audioSys.nextT = audioSys.ac.currentTime + 0.15; }
   skyUni.uFlash.value = 0;
   pads.forEach(p => { p.active = false; p.mesh.material = PAD_OFF.clone(); });
   state.feet.set(padPos(ROUTE[0]).x, ROUTE[0].h, padPos(ROUTE[0]).z);
   state.standing = routeSurfs[0];
   state.lastLanded = { x: state.feet.x, z: state.feet.z, surf: routeSurfs[0] };
-  syncRig(); setMessage('Step on the pads. Reach the top of the tower.');
+  syncRig(); setMessage('Leap roof to roof — the whole rooftop counts. Reach the top of the tower.');
   activatePad(pads[0]);           // you spawn standing on pad 1
   state.jumps = 0; drawHUD();     // (activation doesn't cost a jump; keep the counter clean)
 }
@@ -1524,7 +1403,7 @@ function updatePreview() {
   arcLine.visible = ring.visible = show;
   if (!show) return;
   const r = predictLanding();
-  const onPad = r.hit && pads.some(p => !p.goal && Math.abs(r.y - p.y) < 0.6 && Math.abs(r.x - p.x) <= p.size/2 && Math.abs(r.z - p.z) <= p.size/2);
+  const onPad = r.hit && r.surf && routeRoofSurfs.some((roofs, i) => !pads[i].active && roofs.includes(r.surf));
   const col = !r.hit ? 0xff5040 : (onPad ? 0xffb52e : 0x2fbfae);
   arcLine.material.color.setHex(col); ring.material.color.setHex(col);
   ring.position.set(r.x, r.y + 0.06, r.z);
@@ -1700,8 +1579,6 @@ function tick() {
   }
 
   if (state.timerOn && !state.won && !state.gameOver) { state.time += dt; }
-  updateWave(dt);
-  checkLandfall();
   updateAudio();
   skyUni.uFlash.value = Math.max(0, skyUni.uFlash.value - dt * 0.5);
   beam.material.opacity = 0.13 + Math.sin(performance.now() * 0.002) * 0.05;
