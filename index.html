@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>JUMP — Recreation Prototype v0.6</title>
+<title>JUMP — Recreation Prototype v0.7</title>
 <style>
   html,body{margin:0;padding:0;background:#fdf6ea;color:#5b2a1e;font-family:system-ui,sans-serif;overflow:hidden}
   #ui{position:fixed;top:0;left:0;right:0;padding:12px 16px;z-index:10;pointer-events:none;
@@ -27,7 +27,7 @@
 </head>
 <body>
 <div id="ui">
-  <h1>JUMP <span style="font-size:12px;letter-spacing:1px;color:#b3541e">v0.6 · NEW YORK</span></h1>
+  <h1>JUMP <span style="font-size:12px;letter-spacing:1px;color:#b3541e">v0.7 · NEW YORK</span></h1>
   <p>Leap the rooftops of New York to the top of One World Trade Center. Land <b>anywhere on the next roof</b> — the whole rooftop counts; the glowing pad just marks the spot.
      Your <b>hand aims the jump</b>: raise your arm to fly higher and farther, point level to drop short. Fewer jumps wins.</p>
   <div id="stats">JUMPS 0 · PADS 0/8 · 0:00</div>
@@ -45,7 +45,7 @@
 import * as THREE from 'three';
 
 /* ============================================================
-   JUMP — recreation prototype v0.6
+   JUMP — recreation prototype v0.7
    One mechanic: the leap. v0.2 changes (Dan's in-headset notes):
    · Aim comes from the HAND (full 3D aim direction × fixed speed,
      gravity makes the curve) — raise the hand to elevate the arc.
@@ -137,6 +137,40 @@ import * as THREE from 'three';
    · TRAFFIC: louder floor — the altitude factor now bottoms at
      0.20 (was 0.125), so the busy-city bed is clearly audible
      even on top of the 99 m tower and swells toward the street.
+   v0.7 (Dan's v0.6 in-headset verdict — "the landing system
+   passes offline drop tests but fails at the hand"):
+   · CLOSE RANGE WORKS. Root cause of the ~8 ft dead zone: a
+     level or downward launch drops the feet below the launch
+     roof's top plane while still over its footprint; the launch
+     roof's re-catch rule ignored that crossing, and wallHit
+     skips any box the step STARTS inside — so the body fell
+     through the building's volume to the street, in preview and
+     in flight alike. Two fixes in stepFlight: (1) SKIM — during
+     the re-catch exclusion window the feet can no longer sink
+     below the launch top while over it; the leap skims along
+     the roof and off its edge. (2) FIZZLE — a clearly downward
+     launch (pointing at a spot at your feet) may re-land on the
+     launch roof at once when the crossing is within 3 m of the
+     launch point: point down at a close spot, hop to it. Steep
+     micro-hops (86.5–89°) cover 1.5 / 3 / 5 m on the same roof.
+   · THE MARKER IS THE FIRST SURFACE HIT. The preview sim now
+     stops at the first surface the arc intersects: roof = valid,
+     wall face = invalid (ring pulled out of the face so it never
+     renders inside the building), street = invalid. v0.6 drew
+     the ring at the wall CONTACT point, half-buried in the face,
+     sliding up and down it as the hand moved. The arc line now
+     also ENDS at the marker (its last vertex is the landing
+     position), and the buffer/step budgets are sized for the
+     longest possible arc — v0.6's 240 points / 1150 steps
+     truncated long arcs mid-air, short of the ring.
+   · PADS ARE REAL SURFACES. Each pad slab's top (roof + 0.22 m)
+     is now a landable surface in the roof's trigger set, and
+     checkPad also accepts standing in the pad's footprint on any
+     roof-height surface. Landing ON a raised pad registers —
+     and the preview ring sits ON the pad instead of under it.
+   · REMOVED: the Statue of Liberty (Dan: the box-stepped figure
+     "looks like a snowman") and the Met Life clock faces + hands
+     (the circle-and-two-dashes motif Dan kept flagging).
    ============================================================ */
 
 // ---------- leap tuning ----------
@@ -356,9 +390,7 @@ const silverMat = flatMat(0xc9ccd0);   // light gray "silver" — Chrysler crown
 const copperMat = flatMat(0x5d8570);   // Woolworth / 40 Wall stepped pyramids (signature copper-green, kept)
 const goldMat = flatMat(0xd9a441);     // NY Life pyramid + Liberty's torch flame (signature gold, kept)
 const greenBandMat = flatMat(0x74726c); // McGraw-Hill bands — dulled to gray per the v0.6 palette
-const grayMat = flatMat(0x8f8c85);     // dull gray stone (Liberty's pedestal / island)
-const grayDarkMat = flatMat(0x74726c);
-const libertyMat = flatMat(0x5f9a80);  // Statue of Liberty verdigris — the colour is half the identifier
+
 const cityGroup = new THREE.Group(); scene.add(cityGroup);
 
 // ---------- ONE geometry for mesh, surface AND collider (v0.5) ----------
@@ -453,18 +485,11 @@ function buildLandmark(r) {
     part(g, x - 6, z + 7, 3.4, h, 1.6, 3.4, trimMat);             // stair bulkhead (pad stays clear)
   } else if (r.kind === 'metlife') {
     part(g, x, z, w, 0, h - 6, d, flatMat(PAL.warm));
-    top = part(g, x, z, 8.5, h - 6, 6, 8.5, flatMat(PAL.stone));  // clock tower shaft = pad roof
-    // clock faces on all four sides of the tower, just under the top
-    for (const [ox, oz, ry] of [[0, -4.31, 0], [0, 4.31, Math.PI], [-4.31, 0, -Math.PI / 2], [4.31, 0, Math.PI / 2]]) {
-      const face = new THREE.Mesh(new THREE.CircleGeometry(1.55, 24), new THREE.MeshLambertMaterial({ color: 0xfff6da }));
-      face.position.set(x + ox, h - 3, z + oz); face.rotation.y = ry; g.add(face);
-      const hg = new THREE.Group(); hg.position.copy(face.position); hg.rotation.y = ry; g.add(hg);
-      const handMat = new THREE.MeshLambertMaterial({ color: 0x4a3418 });
-      const hh = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.85, 0.03), handMat);
-      hh.position.set(0.18, 0.30, 0.04); hh.rotation.z = -0.9; hg.add(hh);
-      const mh = new THREE.Mesh(new THREE.BoxGeometry(0.10, 1.25, 0.03), handMat);
-      mh.position.set(0.30, -0.28, 0.04); mh.rotation.z = 2.5; hg.add(mh);
-    }
+    top = part(g, x, z, 8.5, h - 6, 6, 8.5, flatMat(PAL.stone));  // tower shaft = pad roof
+    // v0.7: the clock faces + hands that used to decorate this
+    // shaft are REMOVED — a circle with two dashes on a box-on-a-
+    // box is the motif Dan kept flagging ("nothing to do with New
+    // York"). The plain stepped tower stays; no replacement.
   } else if (r.kind === 'woolworth') {
     top = part(g, x, z, w, 0, h, d, flatMat(PAL.stone2));
     // Stepped copper pyramid — the Woolworth identifier (pad corner stays clear).
@@ -638,48 +663,11 @@ function buildScenic(sd) {
 }
 SCENIC.forEach(buildScenic);
 
-// ---------- v0.6: the Statue of Liberty (Dan: "it has to look like the thing") ----------
-// One unmistakable icon, on a stepped stone island at the harbour
-// (south-east) edge of the map. Scenery only — not a route stop.
-// Built from the same part() boxes as everything else: a stepped
-// robe, a crown with seven spikes, the raised right arm holding a
-// gold torch, the tablet against her left side, all on a stone
-// pedestal. The verdigris is kept: the colour is half the read.
-const LIBERTY = { x: 182, z: 53 };
-function buildLiberty() {
-  const g = new THREE.Group(); cityGroup.add(g);
-  const { x, z } = LIBERTY;
-  // the island: two stepped dull-gray stone tiers
-  part(g, x, z, 30, 0, 1.2, 30, grayDarkMat);
-  part(g, x, z, 24, 1.2, 0.8, 24, grayMat);
-  const plaza = 2.0;                                     // island top
-  // pedestal: stepped stone shaft with a cap
-  part(g, x, z, 9.5, plaza, 1.2, 9.5, grayDarkMat);
-  part(g, x, z, 6.4, plaza + 1.2, 6.5, 6.4, grayMat);
-  part(g, x, z, 7.8, plaza + 7.7, 1.0, 7.8, grayDarkMat);
-  const py = plaza + 8.7;        // her feet ≈ 10.7 m; figure ≈ 13 m; torch top ≈ 23.5 m
-  // the robe: three stepped tiers narrowing as they rise (a box-built cone)
-  part(g, x, z, 3.6, py, 3.4, 3.6, libertyMat);
-  part(g, x, z, 2.7, py + 3.4, 2.8, 2.7, libertyMat);
-  part(g, x, z, 2.0, py + 6.2, 2.4, 2.0, libertyMat);    // torso
-  // head, crown band, and the seven crown spikes
-  part(g, x, z, 1.0, py + 8.6, 1.1, 1.0, libertyMat);
-  part(g, x, z, 1.35, py + 9.7, 0.3, 1.35, libertyMat);
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 6 - 0.5) * 2.2;                       // the fan of spikes across the crown
-    part(g, x + Math.sin(a) * 0.6, z - 0.15 - Math.cos(a) * 0.18, 0.13, py + 9.9, 0.9, 0.13, libertyMat, { col: false, shadow: false });
-  }
-  // raised RIGHT arm (north side — she faces the city): stepped
-  // segments climbing out from the shoulder, gold torch on top
-  part(g, x, z - 1.3, 0.75, py + 7.0, 1.1, 1.5, libertyMat);    // shoulder bridge
-  part(g, x, z - 1.95, 0.6, py + 7.6, 2.0, 0.6, libertyMat);    // upper arm
-  part(g, x, z - 2.3, 0.5, py + 9.4, 1.9, 0.5, libertyMat);     // forearm
-  part(g, x, z - 2.45, 0.34, py + 11.3, 0.8, 0.34, libertyMat); // torch handle
-  part(g, x, z - 2.45, 0.62, py + 12.1, 0.75, 0.62, goldMat);   // torch flame (gold)
-  // the tablet, held against her left (south) side
-  part(g, x, z + 1.35, 0.55, py + 5.2, 1.7, 1.15, libertyMat);
-}
-buildLiberty();
+// ---------- v0.7: the Statue of Liberty is REMOVED ----------
+// v0.6 stood a box-stepped statue on an island at the harbour
+// edge; Dan in-headset: it "looks like a snowman." Removed
+// entirely at his direction — figure, pedestal and island, no
+// replacement. The harbour plot is ordinary filler city now.
 
 // pillar of light above One WTC so you can see where you're headed
 const towerTop = ROUTE[ROUTE.length - 1];
@@ -760,7 +748,6 @@ function buildBlock(cx, cz, w, d, h) {
     const w = 19 + rand() * 4.5, d = 19 + rand() * 4.5;
     if (cx > PARK.x0 - 4 && cx < PARK.x1 + 4 && cz > PARK.z0 - 4 && cz < PARK.z1 + 4) continue;
     if (overlapsRoute(cx, cz, w, d)) continue;
-    if (Math.abs(cx - LIBERTY.x) < w / 2 + 19 && Math.abs(cz - LIBERTY.z) < d / 2 + 19) continue;   // Liberty island stays clear
     // Fillers near the route stay low so leap corridors are never walled off;
     // farther out they can rise into a proper skyline.
     let nearRoute = Infinity;
@@ -769,7 +756,7 @@ function buildBlock(cx, cz, w, d, h) {
     buildBlock(cx, cz, w, d, h);
     placed++;
   }
-  console.log('JUMP v0.6 filler blocks:', placed);
+  console.log('JUMP v0.7 filler blocks:', placed);
 }
 // ---------- v0.6: the merged black-outline mesh ----------
 // Every part() in the city (route, scenic, Liberty, fillers) has
@@ -780,7 +767,7 @@ function buildBlock(cx, cz, w, d, h) {
   const outlineMesh = new THREE.Mesh(eg, new THREE.MeshBasicMaterial({ color: 0x14100e }));
   outlineMesh.frustumCulled = false;
   scene.add(outlineMesh);
-  console.log('JUMP v0.6 outline mesh verts:', edgeVerts.length / 3);
+  console.log('JUMP v0.7 outline mesh verts:', edgeVerts.length / 3);
 }
 
 // Central Park: green rectangle, a pale path, cone trees — no buildings, not landable
@@ -814,6 +801,16 @@ const pads = ROUTE.map((r, i) => {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, 0.22, size), PAD_OFF.clone());
   mesh.position.set(p.x, r.h + 0.11, p.z);
   scene.add(mesh);
+  // v0.7: the pad slab is a REAL landable surface at its top
+  // (roof + 0.22 m), registered in the roof's trigger set. In
+  // v0.6 the slab was visual only: landing on it put your feet on
+  // the roof plane UNDER the slab, the preview ring rendered
+  // underneath the pad mesh ("the landing circle is inevitably
+  // underneath that pad"), and a landing whose standing surface
+  // wasn't in the trigger set never fired the pad at all. Now
+  // landing on the pad IS landing on a surface that counts, and
+  // the ring sits ON the pad where you can see it.
+  routeRoofSurfs[i].push(addSurface(p.x, p.z, size, size, r.h + 0.22));
   return { mesh, x: p.x, z: p.z, y: r.h, size, goal, active: false, name: r.name };
 });
 
@@ -967,6 +964,7 @@ function hopTest(from, to, pitchDeg) {
   const v = new THREE.Vector3(hx / L * Math.cos(pr), Math.sin(pr), hz / L * Math.cos(pr)).multiplyScalar(LAUNCH_SPEED);
   const ctx = newFlightCtx();
   ctx.launchSurf = launch; ctx.maxY = from.y; ctx.oy = -EYE;
+  ctx.lx = from.x; ctx.lz = from.z; ctx.downAim = v.y < -0.25 * LAUNCH_SPEED;
   let outcome = 'timeout';
   for (let i = 0; i < 1600; i++) { const r = stepFlight(p, v, ctx, STEP_DT); if (r !== 'fly') { outcome = r; break; } }
   return { outcome, x: ctx.feetPos.x, y: ctx.feetPos.y, z: ctx.feetPos.z, surfY: ctx.surf ? ctx.surf.y : null, surf: ctx.surf };
@@ -1086,22 +1084,164 @@ function partSurfaceCheck() {
   }
   return { parts: partSurfaces.size, bad };
 }
-window.__JUMP_V06__ = { ambienceFactor, trafficLevelsAt,
+function closeRangeTests() {
+  // v0.7 items 1–2 regression suite (Dan's v0.6 in-headset
+  // verdict: aim dead inside ~8 ft, marker sinking into buildings,
+  // trigger dragging him through the building to the ground).
+  const cases = [];
+  const F = routeSurfs[0];   // Flatiron main roof (y = 9)
+  const flat = { x: padPos(ROUTE[0]).x, y: ROUTE[0].h, z: padPos(ROUTE[0]).z };
+  // (a) steep micro-hops ON the same roof — the ~5-foot hop:
+  // 89° / 88° / 86.5° toward points 1.5 / 3 / 5 m away must land
+  // back on the Flatiron roof set at about those distances.
+  for (const [dist, pitch] of [[1.5, 89], [3, 88], [5, 86.5]]) {
+    const r = hopTest(flat, { x: flat.x, z: flat.z - dist }, pitch);
+    const d = Math.hypot(r.x - flat.x, r.z - flat.z);
+    cases.push({ name: 'same-roof hop ' + dist + 'm @' + pitch + 'deg', pass: r.outcome === 'land' && !!r.surf && routeRoofSurfs[0].includes(r.surf) && d > 0.4 && d < dist + 2.5, detail: r.outcome + ' d=' + d.toFixed(2) });
+  }
+  // (b) point DOWN at a spot 1.5 m away on the same roof — the
+  // natural close-range gesture. v0.6: tunnelled through the
+  // building to the street. v0.7: fizzle-lands on the roof there.
+  {
+    const r = hopTest(flat, { x: flat.x, z: flat.z - 1.5 }, -40);
+    const d = Math.hypot(r.x - flat.x, r.z - flat.z);
+    cases.push({ name: 'down-aim fizzle 1.5m @-40deg', pass: r.outcome === 'land' && !!r.surf && routeRoofSurfs[0].includes(r.surf) && d <= 3.2, detail: r.outcome + ' d=' + d.toFixed(2) });
+  }
+  // (c) adjacent SAME-LEVEL roof: the Flatiron's south block and
+  // its mid step share an edge, both tops at y = 9.
+  {
+    const mid = surfaceAt(0, -4.5, 9.01);
+    const r = hopTest({ x: 0, y: 9, z: 2 }, { x: 0, z: -4.5 }, 85);
+    cases.push({ name: 'adjacent same-level (Flatiron steps)', pass: r.outcome === 'land' && r.surf === mid, detail: r.outcome });
+  }
+  // (d) adjacent ELEVATED surface at close range: the Flatiron
+  // stair bulkhead (top 10.6, +1.6 over the roof) from its edge.
+  {
+    const bulk = surfaceAt(-6, 7, 10.7);
+    const r = hopTest({ x: -6, y: 9, z: 10.9 }, { x: -6, z: 7 }, 88);
+    cases.push({ name: 'close elevated (bulkhead +1.6m)', pass: r.outcome === 'land' && r.surf === bulk, detail: r.outcome + ' surfY=' + (r.surf ? r.surf.y : -1) });
+  }
+  // (e) TUNNEL INVARIANT: for every launch pitch from -60° to 0°,
+  // stepping the real flight function, the feet must NEVER be
+  // below the launch roof's top while still over its footprint.
+  // (v0.6's worst case here was the full building height.)
+  {
+    let worst = 0;
+    for (let pitch = -60; pitch <= 0; pitch += 5) {
+      const pr = pitch * Math.PI / 180;
+      const p = new THREE.Vector3(flat.x, flat.y + EYE, flat.z);
+      const v = new THREE.Vector3(0, Math.sin(pr), -Math.cos(pr)).multiplyScalar(LAUNCH_SPEED);
+      const ctx = newFlightCtx();
+      ctx.launchSurf = F; ctx.maxY = flat.y; ctx.oy = -EYE; ctx.lx = flat.x; ctx.lz = flat.z;
+      ctx.downAim = v.y < -0.25 * LAUNCH_SPEED;
+      for (let i = 0; i < 2400; i++) {
+        const r = stepFlight(p, v, ctx, STEP_DT);
+        const fp = ctx.feetPos;
+        if (fp.x >= F.x0 && fp.x <= F.x1 && fp.z >= F.z0 && fp.z <= F.z1) worst = Math.min(worst, fp.y - F.y);
+        if (r !== 'fly') break;
+      }
+    }
+    cases.push({ name: 'no-tunnel invariant (-60..0 deg)', pass: worst >= -1e-9, detail: 'worst penetration ' + worst.toFixed(4) + ' m' });
+  }
+  return { total: cases.length, failCount: cases.filter(c => !c.pass).length, cases };
+}
+function sweepTest() {
+  // v0.7 item 3: hand pitch maps to launch angle 1:1 across the
+  // full band — no cap in the mapping (leap() applies the aim
+  // direction verbatim × LAUNCH_SPEED; this integrates exactly
+  // that construction ballistically). Apex must rise MONOTONICALLY
+  // with pitch (tilt back = fly higher, always), and flat range
+  // must peak at 45° at the established max (~36.8 m) — range is
+  // physics (v²·sin2θ/g), so past 45° extra tilt buys HEIGHT,
+  // which is what reaches the next, higher roof.
+  const rows = [];
+  for (let pitch = 30; pitch <= 85; pitch += 5) {
+    const pr = pitch * Math.PI / 180;
+    const v = new THREE.Vector3(0, Math.sin(pr), -Math.cos(pr)).multiplyScalar(LAUNCH_SPEED);
+    let y = 0, x = 0, apex = 0, steps = 0;
+    while (steps < 4000) {
+      v.y -= GRAVITY * STEP_DT; y += v.y * STEP_DT; x += -v.z * STEP_DT; steps++;
+      if (y > apex) apex = y;
+      if (y <= 0) break;
+    }
+    rows.push({ pitch, apex: +apex.toFixed(2), range: +x.toFixed(2) });
+  }
+  let apexMono = true;
+  for (let i = 1; i < rows.length; i++) if (rows[i].apex <= rows[i - 1].apex) apexMono = false;
+  const maxRange = Math.max(...rows.map(r => r.range));
+  const range45 = rows.find(r => r.pitch === 45).range;
+  return { rows, apexMono, maxRange: +maxRange.toFixed(2), range45, pass: apexMono && maxRange >= 36 && Math.abs(maxRange - range45) < 0.5 };
+}
+function arcLineTest() {
+  // v0.7 item 2: for every outcome the drawn arc must END exactly
+  // at the marker, the sim must terminate inside its budget, and a
+  // wall marker must sit OUTSIDE the building it hit.
+  const cases = [];
+  const run = (name, feet, surf, dir, extra) => {
+    const pts = [];
+    const origin = new THREE.Vector3(feet.x, feet.y + EYE, feet.z);
+    const r = arcCore(origin, new THREE.Vector3(0, -EYE, 0), dir, surf, (x, y, z) => pts.push([x, y, z]));
+    const last = pts[pts.length - 1];
+    const endGap = Math.hypot(last[0] - r.x, last[1] - r.y, last[2] - r.z);
+    let pass = r.outcome !== 'timeout' && endGap < 1e-6 && pts.length <= ARC_PTS;
+    let detail = r.outcome + ' pts=' + pts.length + ' endGap=' + endGap.toFixed(4);
+    if (extra) { const e = extra(r); pass = pass && e.pass; detail += ' ' + e.detail; }
+    cases.push({ name, pass, detail });
+  };
+  const top = ROUTE[ROUTE.length - 1];
+  run('max arc from WTC top @85deg', { x: top.x, y: top.h, z: top.z }, routeSurfs[routeSurfs.length - 1],
+      new THREE.Vector3(0, Math.sin(85 * Math.PI / 180), -Math.cos(85 * Math.PI / 180)).normalize());
+  run('long arc from WTC top @45deg', { x: top.x, y: top.h, z: top.z }, routeSurfs[routeSurfs.length - 1],
+      new THREE.Vector3(0, Math.sin(45 * Math.PI / 180), -Math.cos(45 * Math.PI / 180)).normalize());
+  run('wall marker outside the face', { x: 0, y: 0, z: 18 }, null,
+      new THREE.Vector3(0, Math.sin(12 * Math.PI / 180), -Math.cos(12 * Math.PI / 180)).normalize(),
+      r => ({ pass: r.outcome === 'wall' && r.z > 11, detail: 'marker z=' + r.z.toFixed(2) + ' (Flatiron face at z=11)' }));
+  return { total: cases.length, failCount: cases.filter(c => !c.pass).length, cases };
+}
+function padEdgeTest() {
+  // v0.7 item 4 regression (Dan landed ON a raised pad and it
+  // didn't count): drop onto every pad's four corners and edge
+  // midpoints. Each drop must land on a surface that registers
+  // that pad — its own slab top, or (footprint rule) any surface
+  // at roof height within the footprint.
+  let total = 0; const failures = [];
+  pads.forEach((p, i) => {
+    const half = p.size / 2;
+    for (const sx of [-1, 0, 1]) for (const sz of [-1, 0, 1]) {
+      if (!sx && !sz) continue;
+      const x = p.x + sx * half, z = p.z + sz * half;
+      total++;
+      const pp = new THREE.Vector3(x, p.y + 30, z), vv = new THREE.Vector3();
+      const ctx = newFlightCtx(); ctx.maxY = -1e9; ctx.leftLaunch = true;
+      let outcome = 'timeout';
+      for (let k = 0; k < 2400; k++) { const rr = stepFlight(pp, vv, ctx, STEP_DT); if (rr !== 'fly') { outcome = rr; break; } }
+      const idx = ctx.surf ? routeRoofSurfs.findIndex(a => a.includes(ctx.surf)) : -1;
+      const inFoot = !!ctx.surf && Math.abs(ctx.feetPos.x - p.x) <= half + 1e-6 && Math.abs(ctx.feetPos.z - p.z) <= half + 1e-6
+                     && ctx.surf.y >= p.y - 0.01 && ctx.surf.y <= p.y + 0.35;
+      if (outcome !== 'land' || (idx !== i && !inFoot))
+        failures.push(p.name + ' @' + x.toFixed(1) + ',' + z.toFixed(1) + ': ' + outcome + ' padIdx=' + idx);
+    }
+  });
+  return { total, failCount: failures.length, failures: failures.slice(0, 20) };
+}
+window.__JUMP_V07__ = { ambienceFactor, trafficLevelsAt,
                         musicPhase: () => 'calm',
-                        LAUNCH_SPEED, GRAVITY, STEP_DT, EYE,
-                        LANDMARK_COUNT: ROUTE.length + SCENIC.length + 1,   // + the Statue of Liberty
+                        LAUNCH_SPEED, GRAVITY, STEP_DT, EYE, get ARC_PTS() { return ARC_PTS; },   // getter: the const is declared later in the file
+                        LANDMARK_COUNT: ROUTE.length + SCENIC.length,   // v0.7: the Statue of Liberty is removed
                         routeCount: ROUTE.length, scenicCount: SCENIC.length,
                         surfaceCount: () => surfaces.length, colliderCount: () => colliders.length,
-                        ROUTE, SKY_PLATFORMS, LIBERTY, surfaceAt, hopTest, landGridTest,
-                        routeRoofTest, landTestAll, wallTestAll, partSurfaceCheck, VERSION: 'v0.6',
+                        ROUTE, SKY_PLATFORMS, LIBERTY: null, surfaceAt, hopTest, landGridTest,
+                        routeRoofTest, landTestAll, wallTestAll, partSurfaceCheck, VERSION: 'v0.7',
+                        closeRangeTests, sweepTest, arcLineTest, padEdgeTest, arcCore,
                         routeRoofSurfs: () => routeRoofSurfs.map(a => a.length),
                         padForSurface: sf => routeRoofSurfs.findIndex(a => a.includes(sf)),
                         ensureAudio: () => { audio(); buildAudio(); return AC ? AC.state : 'none'; },
                         audioState: () => AC ? AC.state : 'none',
                         driveAudio: h => { state.feet.y = h; updateAudio(); return audioSys ? { rumble: audioSys.trafficGain.gain.value, wash: audioSys.trafficBand.gain.value } : null; },
                         partSurfaceCount: () => partSurfaces.size };
-window.__JUMP_V05__ = window.__JUMP_V06__;   // aliases so older test scripts still run
-window.__JUMP_V04__ = window.__JUMP_V06__;
+window.__JUMP_V06__ = window.__JUMP_V07__;   // aliases so older test scripts still run
+window.__JUMP_V05__ = window.__JUMP_V07__;
+window.__JUMP_V04__ = window.__JUMP_V07__;
 
 const sfx = {
   leap: () => tone(300, 90, 0.22, 'sine', 0.10),
@@ -1162,6 +1302,7 @@ const state = {
   standing: null,           // surface rect we're standing on
   lastLanded: null,         // {x, z, surf} — respawn point
   launchSurf: null, maxY: 0, leftLaunch: false,   // flight bookkeeping (see landing rule)
+  lx: 0, lz: 0, downAim: false,                   // v0.7: feet launch point + downward-launch flag
   q: new THREE.Vector3(),                          // v0.4: the simulated AIM point (hand in VR, eye on desktop)
   flightOffset: new THREE.Vector3()                // v0.4: feet − aim point, frozen at leap; body = q + offset
 };
@@ -1182,7 +1323,15 @@ function activatePad(p) {
 }
 function checkPad() { // standing anywhere on a route roof? (v0.6: whole-roof triggers)
   for (let i = 0; i < pads.length; i++) {
-    if (!pads[i].active && routeRoofSurfs[i].includes(state.standing)) activatePad(pads[i]);
+    if (pads[i].active) continue;
+    if (routeRoofSurfs[i].includes(state.standing)) { activatePad(pads[i]); continue; }
+    // v0.7 belt-and-braces: standing within the pad's own footprint
+    // on ANY surface at roof height (a parapet rim, a clutter top,
+    // the pad slab itself) also counts — the trigger volume runs
+    // from the roof surface up through the pad's top.
+    const p = pads[i];
+    if (state.standing && Math.abs(state.feet.x - p.x) <= p.size / 2 && Math.abs(state.feet.z - p.z) <= p.size / 2
+        && state.standing.y >= p.y - 0.01 && state.standing.y <= p.y + 0.35) activatePad(p);
   }
 }
 function winRun() {
@@ -1239,8 +1388,17 @@ function facingDir() { // horizontal facing, used only for thumbstick shuffling
 // Landing rule: a surface catches the body when it crosses its top
 // falling — except the launch surface, which only catches again once
 // the body has risen well above it or left its footprint.
-function canLandOn(s, ctx) {
-  return s !== ctx.launchSurf || ctx.maxY > s.y + 0.25 || ctx.leftLaunch;
+function canLandOn(s, ctx, x, z) {
+  if (s !== ctx.launchSurf) return true;
+  if (ctx.maxY > s.y + 0.25 || ctx.leftLaunch) return true;
+  // v0.7 FIZZLE: a clearly DOWNWARD launch (pointing at a spot at
+  // your feet) may re-land on the launch roof immediately when the
+  // crossing is within 3 m of the launch point — that's the close-
+  // range "hop to where I'm pointing" case Dan asked for. A level
+  // launch still can't re-land (it skims off the edge instead —
+  // see the skim in stepFlight), and a downward launch at a FAR
+  // target crosses beyond 3 m, so it flies on as a real leap.
+  return ctx.downAim && x !== undefined && Math.hypot(x - ctx.lx, z - ctx.lz) <= 3;
 }
 // v0.5 SWEPT surface test: the segment (prevFeet → curFeet) crossing
 // a surface's top plane while falling. v0.4 tested only the step's
@@ -1264,7 +1422,7 @@ function surfaceCross(pf, cf, ctx) {
       const t = (pf.y - sf.y) / (pf.y - cf.y);
       const x = pf.x + (cf.x - pf.x) * t, z = pf.z + (cf.z - pf.z) * t;
       if (x < sf.x0 - 1e-6 || x > sf.x1 + 1e-6 || z < sf.z0 - 1e-6 || z > sf.z1 + 1e-6) continue;
-      if (!canLandOn(sf, ctx)) continue;
+      if (!canLandOn(sf, ctx, x, z)) continue;
       if (!best || t < best.t) best = { t, s: sf, x, z };
     }
   }
@@ -1280,8 +1438,31 @@ function stepFlight(p, v, ctx, dt) {
   const prev = ctx.prev.copy(p);
   v.y -= GRAVITY * dt;
   p.addScaledVector(v, dt);
-  const fx = p.x + ctx.ox, fy = p.y + ctx.oy, fz = p.z + ctx.oz;
+  const fx = p.x + ctx.ox, fz = p.z + ctx.oz;
+  let fy = p.y + ctx.oy;
   const pfx = prev.x + ctx.ox, pfy = prev.y + ctx.oy, pfz = prev.z + ctx.oz;
+  // v0.7 SKIM — the close-range tunnel fix. During the launch
+  // surface's re-catch exclusion window (the body hasn't yet risen
+  // 0.25 m above it or left its footprint), a level/downward step
+  // would take the feet BELOW the launch top while still over it.
+  // v0.6 let exactly that happen: the crossing was ignored (the
+  // exclusion), wallHit then skipped the box because the step
+  // STARTED inside it, and the body fell through the building's
+  // volume to the street — Dan's "it pulls me through the
+  // building and drags me to the ground" below ~8 ft. Now the
+  // feet skim along the launch top until they leave the footprint
+  // (like running out of roof), UNLESS this step's crossing is a
+  // close-range downward fizzle, which must be allowed to land.
+  const ls2 = ctx.launchSurf;
+  if (ls2 && fy < ls2.y && pfy >= ls2.y && fx >= ls2.x0 && fx <= ls2.x1 && fz >= ls2.z0 && fz <= ls2.z1) {
+    let fizzle = false;
+    if (ctx.downAim && pfy > fy) {
+      const tc = (pfy - ls2.y) / (pfy - fy);
+      const xc = pfx + (fx - pfx) * tc, zc = pfz + (fz - pfz) * tc;
+      fizzle = Math.hypot(xc - ctx.lx, zc - ctx.lz) <= 3;
+    }
+    if (!fizzle) { p.y += ls2.y - fy; fy = ls2.y; }
+  }
   ctx.feetPos.set(fx, fy, fz);
   ctx.maxY = Math.max(ctx.maxY, fy);
   const ls = ctx.launchSurf;
@@ -1311,6 +1492,7 @@ function stepFlight(p, v, ctx, dt) {
 }
 function newFlightCtx() {
   return { launchSurf: null, maxY: 0, leftLaunch: false, surf: null,
+           lx: 0, lz: 0, downAim: false,   // v0.7: feet launch point + downward-launch flag (fizzle rule)
            prev: new THREE.Vector3(), feetPos: new THREE.Vector3(),
            _pf: new THREE.Vector3(), _cf: new THREE.Vector3(), ox: 0, oy: 0, oz: 0 };
 }
@@ -1326,6 +1508,8 @@ function leap() {
   state.vel.copy(d).multiplyScalar(LAUNCH_SPEED);   // hand angle IS the trajectory — no fixed split
   state.launchSurf = state.standing;
   state.maxY = state.feet.y; state.leftLaunch = false;
+  state.lx = state.feet.x; state.lz = state.feet.z;
+  state.downAim = state.vel.y < -0.25 * LAUNCH_SPEED;   // pointing clearly DOWN at launch (v0.7 fizzle rule)
   flightAcc = 0;
   state.mode = 'flying';
   state.jumps++;
@@ -1363,7 +1547,7 @@ function fallToStreet() {
 // them distracting and misleading). Allocation-free: the sim writes
 // straight into the line's buffer (the old version cloned a Vector3
 // per point per frame — the occasional arc hang).
-const ARC_PTS = 240;
+const ARC_PTS = 1024;   // v0.7: was 240 — long arcs overflowed the buffer and the drawn line stopped short of the ring
 const arcGeo = new THREE.BufferGeometry();
 arcGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ARC_PTS * 3), 3));
 const arcLine = new THREE.Line(arcGeo, new THREE.LineBasicMaterial({ color: 0x2fbfae, transparent: true, opacity: 0.55 }));
@@ -1373,30 +1557,57 @@ const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.8, 28),
 ring.rotation.x = -Math.PI / 2; scene.add(ring);
 const arcCtx = newFlightCtx();
 const _pq = new THREE.Vector3(), _pv = new THREE.Vector3();
+// v0.7: ONE arc core, shared by the live preview and the test
+// hooks. Simulates a leap from an aim origin with a body offset,
+// exactly as leap() flies it. The marker it returns is the FIRST
+// surface the arc intersects:
+//   land   → feet on that surface (valid colour)
+//   wall   → the arc meets a wall face first (invalid colour).
+//            The marker is pulled 0.9 m back out of the face along
+//            the approach direction so the ring never renders
+//            inside the building (v0.6 planted it AT the contact
+//            point — half-buried in the face, sliding up and down
+//            the wall as the hand moved: Dan's "platform attached
+//            to my wand, sinking into the building").
+//   street → feet on the ground (invalid colour)
+// If write(x,y,z) is given it receives the drawn points: the aim
+// point's path, then a FINAL vertex at the marker itself, so the
+// line always ends exactly at the ring (v0.6's line stopped at
+// the hand's ballistic endpoint, floating short of the circle —
+// and on long arcs it ran out of buffer/steps before even that).
+function arcCore(origin, offset, dir, standing, write) {
+  const p = _pq.copy(origin);
+  const v = _pv.copy(dir).multiplyScalar(LAUNCH_SPEED);
+  arcCtx.launchSurf = standing; arcCtx.maxY = origin.y + offset.y; arcCtx.leftLaunch = false; arcCtx.surf = null;
+  arcCtx.ox = offset.x; arcCtx.oy = offset.y; arcCtx.oz = offset.z;
+  arcCtx.lx = origin.x + offset.x; arcCtx.lz = origin.z + offset.z;
+  arcCtx.downAim = v.y < -0.25 * LAUNCH_SPEED;
+  let outcome = 'timeout';
+  if (write) write(p.x, p.y, p.z);
+  for (let i = 0; i < 2400; i++) {   // 10 s of sim — the longest possible flight (~6.2 s) always terminates
+    const r = stepFlight(p, v, arcCtx, STEP_DT);
+    if (write && (i % 3 === 2 || r !== 'fly')) write(p.x, p.y, p.z);
+    if (r !== 'fly') { outcome = r; break; }
+  }
+  if (outcome === 'timeout') outcome = 'street';   // unreachable in practice; marker = last simulated point
+  const fp = arcCtx.feetPos;
+  let mx = fp.x, my = fp.y, mz = fp.z;
+  if (outcome === 'wall') {
+    const hl = Math.hypot(v.x, v.z);
+    if (hl > 1e-6) { mx -= v.x / hl * 0.9; mz -= v.z / hl * 0.9; }   // ring sits tangent outside the face
+  }
+  if (write) write(mx, my, mz);   // the line ENDS at the marker, always
+  return { outcome, hit: outcome === 'land', wall: outcome === 'wall', x: mx, y: my, z: mz, surf: arcCtx.surf };
+}
 function predictLanding() {
   const ao = aimOrigin();
-  const p = _pq.copy(ao.origin);
-  const v = _pv.copy(aimDirection()).multiplyScalar(LAUNCH_SPEED);
-  arcCtx.launchSurf = state.standing; arcCtx.maxY = state.feet.y; arcCtx.leftLaunch = false; arcCtx.surf = null;
-  arcCtx.ox = ao.offset.x; arcCtx.oy = ao.offset.y; arcCtx.oz = ao.offset.z;
   const pos = arcGeo.attributes.position;
-  let n = 0, outcome = 'street';
-  const writePt = () => { if (n < ARC_PTS) { pos.setXYZ(n, p.x, p.y, p.z); n++; } };
-  writePt();
-  for (let i = 0; i < 1150; i++) {
-    const r = stepFlight(p, v, arcCtx, STEP_DT);
-    if (i % 3 === 2 || r !== 'fly') writePt();
-    if (r === 'land') { outcome = 'land'; break; }
-    if (r === 'street') { outcome = 'street'; break; }
-    if (r === 'wall') {   // body hits the wall face, then drops straight down it
-      v.set(0, Math.min(v.y, 0), 0);
-      for (let j = 0; j < 480 && p.y + arcCtx.oy > 0; j++) { v.y -= GRAVITY * STEP_DT; p.y += v.y * STEP_DT; if (j % 3 === 2) writePt(); }
-      outcome = 'street'; break;
-    }
-  }
+  let n = 0;
+  const r = arcCore(ao.origin, ao.offset, aimDirection(), state.standing,
+    (x, y, z) => { if (n < ARC_PTS) { pos.setXYZ(n, x, y, z); n++; } });
   pos.needsUpdate = true;
   arcGeo.setDrawRange(0, n);
-  return { hit: outcome === 'land', x: arcCtx.feetPos.x, y: arcCtx.feetPos.y, z: arcCtx.feetPos.z, surf: arcCtx.surf };
+  return r;
 }
 function updatePreview() {
   const show = state.mode === 'ready';
@@ -1554,6 +1765,7 @@ function tick() {
   if (state.mode === 'flying') {
     flightCtx.launchSurf = state.launchSurf; flightCtx.maxY = state.maxY;
     flightCtx.leftLaunch = state.leftLaunch; flightCtx.surf = null;
+    flightCtx.lx = state.lx; flightCtx.lz = state.lz; flightCtx.downAim = state.downAim;
     flightCtx.ox = state.flightOffset.x; flightCtx.oy = state.flightOffset.y; flightCtx.oz = state.flightOffset.z;
     let r = 'fly';
     // v0.5: accumulator — the flight advances in exactly the same
